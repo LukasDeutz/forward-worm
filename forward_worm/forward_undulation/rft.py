@@ -150,7 +150,7 @@ def sim_gamma():
     
     base_parameter = get_base_parameter()
     base_parameter['T'] = 2.5
-    base_parameter['rc'] = 'spheroid'
+    #base_parameter['rc'] = 'cylinder'
 
     gamma_param = {'v_min': -3, 'v_max': 1.0, 'N': None, 'step': 0.2, 'round': 3, 'log': True, 'scale': None}
                             
