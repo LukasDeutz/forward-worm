@@ -3,21 +3,24 @@ Created on 27 Jul 2022
 
 @author: lukas
 '''
+from os import mkdir
+from os.path import isdir
+
 import matplotlib.pyplot as plt
 
-from parameter_scan.util import load_grid_param, load_file_grid
+from parameter_scan.util import load_file_grid
+from simple_worm.plot3d_cosserat import plot_single_strain
+
 from simple_worm_experiments.forward_undulation.plot_undulation import *
-from matplotlib.pyplot import semilogx
+from simple_worm_experiments.plot import *
 
 data_path = '../../data/forward_undulation/'
 fig_path = '../../figures/forward_undulation/'
 
-def plot_1d(PG, key = None, v_arr = None, semilogx = False):
+def plot_1d_scan(PG, key = None, v_arr = None, semilogx = False):
     
     dp = data_path + 'simulations/'
-    pref = 'forward_undulation_'
-
-    file_grid = load_file_grid(PG.hash_grid, dp, pref)
+    file_grid = load_file_grid(PG.hash_grid, dp)
 
     FS_arr = [file['FS'] for file in file_grid]
 
@@ -28,10 +31,10 @@ def plot_1d(PG, key = None, v_arr = None, semilogx = False):
                 
     gs = plt.GridSpec(1, 4)
     
-    ax1 = plt.subplot(gs[0])
-    ax2 = plt.subplot(gs[1])
-    ax3 = plt.subplot(gs[2])
-    ax4 = plt.subplot(gs[3])
+    ax1 = plt.subplot(gs[0,0])
+    ax2 = plt.subplot(gs[0,1])
+    ax3 = plt.subplot(gs[0,2])
+    ax4 = plt.subplot(gs[0,3])
         
     cl = plot_mean_center_of_mass_velocity(ax1, # @UndefinedVariable
                                            FS_arr, 
@@ -52,7 +55,5 @@ def plot_1d(PG, key = None, v_arr = None, semilogx = False):
     
     return
 
-def plot_curvature():
-    
-    pass
-    
+
+
