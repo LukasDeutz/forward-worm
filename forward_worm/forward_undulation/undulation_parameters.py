@@ -4,10 +4,11 @@ Created on 31 Jul 2022
 @author: lukas
 '''
 
-from os.path import isdir
+from os.path import isdir, expanduser
 from os import mkdir
 import numpy as np
 import matplotlib.pyplot as plt
+import pickle
 
 # Local imports
 from parameter_scan.parameter_scan import ParameterGrid
@@ -15,9 +16,11 @@ from parameter_scan.util import load_grid_param, load_file_grid
 
 from simple_worm.plot3d_cosserat import plot_single_strain_vs_control
 from simple_worm_experiments.forward_undulation.undulation import wrap_simulate_undulation
-from simple_worm_experiments.util import simulate_batch_parallel, get_solver
-from forward_undulation.plot_undu import plot_1d_scan
+from simple_worm_experiments.util import simulate_batch_parallel, get_solver, write_sim_data_to_file, get_filename_from_PG_arr
+
 from simple_worm_experiments.util import comp_mean_com_velocity
+
+data_path_mju = expanduser('~') + '/mnt/mju/git/forward-worm/data/forward_undulation/'
 
 data_path = '../../data/forward_undulation/'
 fig_path = '../../figures/forward_undulation/'
@@ -34,8 +37,8 @@ def get_base_parameter():
     use_inertia = False
     
     # Solver parameter
-    pi_alpha = 0.5
-    pi_maxiter = 100
+    pi_alpha = 0.9
+    pi_maxiter = 1000
         
     # Geometric parameter    
     L0 = 1130 * 1e-6
@@ -152,37 +155,54 @@ def sim_wavelength():
     
     return
 
-def sim_lam_A():
-    
+def get_lam_A_grid():
+
     base_parameter = get_base_parameter()
-    base_parameter['T'] = 2.5
-    base_parameter['N'] = 257  
+    base_parameter['N'] = 257
     base_parameter['dt'] = 0.001
-    base_parameter['pi_alpha'] = 0.9
-    base_parameter['pi_maxiter'] = 1000
-        
-    lam_param = {'v_min': 0.4, 'v_max': 2.51, 'N': None, 'step': 0.2, 'round': 1, 'log': False, 'scale': None, 'inverse': False}        
+    base_parameter['fdo'] = {1: 2, 2: 2}
+    base_parameter['pi_alpha0_max'] = 1.0            
+    base_parameter['pi_alpha0_min'] = 0.1
+    base_parameter['pi_rel_err_growth_tol'] = 4.0
+    base_parameter['pi_maxiter_no_progress'] = 50
+    base_parameter['T'] = 2.5
+                
+    lam_param = {'v_min': 0.5, 'v_max': 2.61, 'N': None, 'step': 0.1, 'round': 1, 'log': False, 'scale': None, 'inverse': False}        
+
     A_param = lam_param.copy()    
     A_param['inverse'] = True
 
     #c_arr = np.array([np.pi, 2*np.pi, 3*np.pi]) 
     
-    c_arr = np.array([3*np.pi])
-    
+    c_arr = np.array([3*np.pi]) 
+        
     PG_arr = []
     
     for c in c_arr:
 
-        A_param['scale'] = 1./c
+        A_param['scale'] = c
 
         grid_param = {('lam', 'A'): [lam_param, A_param]}
                         
         PG = ParameterGrid(base_parameter, grid_param)                
         PG_arr.append(PG)
+
+        grid_param = {('lam', 'A'): [lam_param, A_param]}
+        
+        PG_arr
+
+    return PG_arr, c_arr
+
+def sim_lam_A():
+        
+        
+    PG_arr, c_arr = get_lam_A_grid()
     
+    for PG, c in zip(PG_arr, c_arr):
+
         print(f'Simulate c={c:.1f}: #{len(PG)} simulations')
      
-        N_worker = 4
+        N_worker = 6
 
         simulate_batch_parallel(N_worker, 
                                 data_path,                            
@@ -194,29 +214,43 @@ def sim_lam_A():
         
         PG.save(data_path + 'kinematic_parameter/', prefix = 'E_')
 
+    print('Finished simulation!')
 
     return PG_arr, c_arr
 
-def plot_lam_A(PG_arr, c_arr):
+def save_lam_A(PG_arr):
+        
+    output_keys = ['x', 'times']
+                                 
+    file_path = write_sim_data_to_file(data_path + 'simulations/', PG_arr, output_keys)
+
+    print(f'Saved file to {file_path}')
+
+    return
     
-    dp = data_path + 'simulations/'
+def plot_lam_A(PG_arr, c_arr):
+        
+    file_path = data_path + 'simulations/' + get_filename_from_PG_arr(PG_arr) 
+    data_dict = pickle.load(open(data_path + file_path, 'rb'))
 
     ax = plt.subplot(111)
     
     for i, PG in enumerate(PG_arr):
     
-        file_grid = load_file_grid(PG.hash_grid, dp)
-        FS_arr = [file['FS'] for file in file_grid]
+        data = data_dict[PG.filename]
+        
+        x_list = data['x']
+        t_list = data['times']
 
         Delta_T = 1./PG.base_parameter['f']
         
         lam_arr = np.array([v[0] for v in PG.v_arr])
-        U_arr = []
+        U_arr = np.zeros(len(x_list))
     
-        for FS in FS_arr:
+        for j, (x_arr, t_arr) in enumerate(zip(x_list, t_list)):
                             
-            U = comp_mean_com_velocity(FS, Delta_T = Delta_T)
-            U_arr.append(U)
+            U = comp_mean_com_velocity(x_arr, t_arr, Delta_T = Delta_T)
+            U_arr[j] = U
 
         ax.plot(lam_arr, U_arr, 'o-', label = c_arr[i])
 
@@ -225,6 +259,19 @@ def plot_lam_A(PG_arr, c_arr):
       
     return
     
+def check_if_pic(PG):
+    
+    dp = data_path + 'simulations/'
+
+    file_grid = load_file_grid(PG.hash_grid, dp)
+    file_arr = file_grid.flatten()
+    
+    pic_arr = np.concatenate([file['FS'].pic for file in file_arr])
+        
+    print(f'PI-solver converged at every time step of every simulation: {np.all(pic_arr.flatten())}')
+    
+    return np.all(pic_arr.flatten())
+        
 if __name__ == '__main__':
     
     # PG_f = sim_frequency()
@@ -233,8 +280,14 @@ if __name__ == '__main__':
     # PG_lam = sim_wavelength()        
     # plot_1d_scan(PG_lam, key = 'lam', v_arr = PG_lam.v_arr, semilogx = False)    
 
-    PG_lam_A_arr, c_arr = sim_lam_A()
-    plot_lam_A(PG_lam_A_arr, c_arr)
+
+    #PG_lam_A_arr, c_arr = get_lam_A_grid()
+    PG_lam_A_arr, c_arr = sim_lam_A()    
+    # save_lam_A(PG_lam_A_arr)
+    # load_lam_A(PG_lam_A_arr)
+    #plot_lam_A(PG_lam_A_arr, c_arr)
+        
+    #PG_lam_A_arr, c_arr = get_lam_A_grid()   
 
 
 
