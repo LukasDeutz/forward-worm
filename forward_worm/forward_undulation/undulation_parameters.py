@@ -4,26 +4,43 @@ Created on 31 Jul 2022
 @author: lukas
 '''
 
-from os.path import isdir, expanduser
+from os.path import isdir, expanduser, join
 from os import mkdir
 import numpy as np
 import matplotlib.pyplot as plt
 import pickle
 
 # Local imports
-from parameter_scan.parameter_scan import ParameterGrid
+from parameter_scan import ParameterGrid
 from parameter_scan.util import load_grid_param, load_file_grid
 
 from simple_worm.plot3d_cosserat import plot_single_strain_vs_control
 from simple_worm_experiments.forward_undulation.undulation import wrap_simulate_undulation
-from simple_worm_experiments.util import simulate_batch_parallel, get_solver, write_sim_data_to_file, get_filename_from_PG_arr
+from simple_worm_experiments.util import simulate_batch_parallel, write_sim_data_to_file 
+from simple_worm_experiments.util import comp_mean_com_velocity, get_filename_from_PG_arr
 
-from simple_worm_experiments.util import comp_mean_com_velocity
+from mp_progress_logger import FWProgressLogger 
 
 data_path_mju = expanduser('~') + '/mnt/mju/git/forward-worm/data/forward_undulation/'
+fig_path = '../../figures/forward_undulation/'
+
 
 data_path = '../../data/forward_undulation/'
-fig_path = '../../figures/forward_undulation/'
+log_dir = join(data_path, 'logs')
+output_dir = join(data_path, 'simulations')
+
+# Gazzola, M., Dudte, L. H., McCormick, A. G., & Mahadevan, L. (2018). 
+# Forward and inverse problems in the mechanics of soft filaments. 
+# Section 3.3 
+a = 1
+
+dt_arr = [0.01, 0.01/4, 0.01/4**2, 0.01/4**3]
+N_arr =  [100, 250, 500, 1000]
+
+#N_arr  = [int(a/dt) for dt in dt_arr]
+
+dt_0 = dt_arr.pop(0)
+N0 = N_arr.pop(0)
 
 def get_base_parameter():
     
@@ -147,7 +164,8 @@ def sim_wavelength():
                             PG,                             
                             overwrite = False, 
                             save = 'all', 
-                            _try = True)
+                            _try = True,
+                            quiet = False)
     
     PG.save(data_path + 'kinematic_parameter/', prefix = 'E_')
 
@@ -158,24 +176,25 @@ def sim_wavelength():
 def get_lam_A_grid():
 
     base_parameter = get_base_parameter()
-    base_parameter['N'] = 257
-    base_parameter['dt'] = 0.001
+    base_parameter['N'] = N0
+    base_parameter['T'] = 2.5
+    base_parameter['dt'] = dt_0       
     base_parameter['fdo'] = {1: 2, 2: 2}
     base_parameter['pi_alpha0_max'] = 1.0            
     base_parameter['pi_alpha0_min'] = 0.1
     base_parameter['pi_rel_err_growth_tol'] = 4.0
     base_parameter['pi_maxiter_no_progress'] = 50
-    base_parameter['T'] = 2.5
-                
-    lam_param = {'v_min': 0.5, 'v_max': 2.61, 'N': None, 'step': 0.1, 'round': 1, 'log': False, 'scale': None, 'inverse': False}        
+    base_parameter['pi_tol'] = 1e-5
+                                
+    lam_param = {'v_min': 0.4, 'v_max': 2.0, 'N': None, 'step': 0.2, 'round': 1, 'log': False, 'scale': None, 'inverse': False}        
 
     A_param = lam_param.copy()    
     A_param['inverse'] = True
 
-    #c_arr = np.array([np.pi, 2*np.pi, 3*np.pi]) 
-    
-    c_arr = np.array([3*np.pi]) 
-        
+    c_arr = np.array([np.pi, 2*np.pi, 3*np.pi]) 
+    #c_arr = np.array([2*np.pi]) 
+    #c_arr = np.array([3*np.pi]) 
+            
     PG_arr = []
     
     for c in c_arr:
@@ -194,28 +213,30 @@ def get_lam_A_grid():
     return PG_arr, c_arr
 
 def sim_lam_A():
-        
-        
+                
     PG_arr, c_arr = get_lam_A_grid()
+
+    exper_spec = 'Forward undulation, simulations for different Lambda and A'
+    
+    N_worker = 6
     
     for PG, c in zip(PG_arr, c_arr):
 
         print(f'Simulate c={c:.1f}: #{len(PG)} simulations')
      
-        N_worker = 6
+        PGL = FWProgressLogger(PG, 
+                               log_dir, 
+                               pbar_to_file = True,                        
+                               pbar_path = join(data_path, 'pbar/pbar.txt'), 
+                               exper_spec = exper_spec)
 
-        simulate_batch_parallel(N_worker, 
-                                data_path,                            
-                                wrap_simulate_undulation, 
-                                PG,                             
-                                overwrite = False, 
-                                save = 'all', 
-                                _try = True)
-        
-        PG.save(data_path + 'kinematic_parameter/', prefix = 'E_')
-
-    print('Finished simulation!')
-
+        PGL.iterative_run_pool(N_worker, 
+                               wrap_simulate_undulation, 
+                               N_arr, 
+                               dt_arr,
+                               output_dir = join(data_path, 'simulations'),
+                               overwrite = True)
+                                
     return PG_arr, c_arr
 
 def save_lam_A(PG_arr):
@@ -281,9 +302,11 @@ if __name__ == '__main__':
     # plot_1d_scan(PG_lam, key = 'lam', v_arr = PG_lam.v_arr, semilogx = False)    
 
 
-    #PG_lam_A_arr, c_arr = get_lam_A_grid()
-    PG_lam_A_arr, c_arr = sim_lam_A()    
-    # save_lam_A(PG_lam_A_arr)
+    #PG_lam_A_arr, c_arr = get_lam_A_grid()    
+    #print([PG.filename for PG in PG_lam_A_arr])
+        
+    P_lam_A_arr, c_arr = sim_lam_A()    
+    #save_lam_A(PG_lam_A_arr)
     # load_lam_A(PG_lam_A_arr)
     #plot_lam_A(PG_lam_A_arr, c_arr)
         
