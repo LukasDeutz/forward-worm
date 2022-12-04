@@ -177,7 +177,7 @@ def get_lam_A_grid():
 
     base_parameter = get_base_parameter()
     base_parameter['N'] = N0
-    base_parameter['T'] = 2.5
+    base_parameter['T'] = 0.5
     base_parameter['dt'] = dt_0       
     base_parameter['fdo'] = {1: 2, 2: 2}
     base_parameter['pi_alpha0_max'] = 1.0            
@@ -186,13 +186,13 @@ def get_lam_A_grid():
     base_parameter['pi_maxiter_no_progress'] = 50
     base_parameter['pi_tol'] = 1e-5
                                 
-    lam_param = {'v_min': 0.4, 'v_max': 2.0, 'N': None, 'step': 0.2, 'round': 1, 'log': False, 'scale': None, 'inverse': False}        
+    lam_param = {'v_min': 0.4, 'v_max': 2.0, 'N': None, 'step': 0.1, 'round': 1, 'log': False, 'scale': None, 'inverse': False}        
 
     A_param = lam_param.copy()    
     A_param['inverse'] = True
 
-    c_arr = np.array([np.pi, 2*np.pi, 3*np.pi]) 
-    #c_arr = np.array([2*np.pi]) 
+    #c_arr = np.array([np.pi, 2*np.pi, 3*np.pi]) 
+    c_arr = np.array([2*np.pi]) 
     #c_arr = np.array([3*np.pi]) 
             
     PG_arr = []
@@ -302,9 +302,10 @@ if __name__ == '__main__':
     # plot_1d_scan(PG_lam, key = 'lam', v_arr = PG_lam.v_arr, semilogx = False)    
 
 
-    #PG_lam_A_arr, c_arr = get_lam_A_grid()    
-    #print([PG.filename for PG in PG_lam_A_arr])
-        
+    #PG_lam_A_arr, c_arr = get_lam_A_grid()        
+    #print(len(PG_lam_A_arr[0]))
+    
+    #print([PG.filename for PG in PG_lam_A_arr])        
     P_lam_A_arr, c_arr = sim_lam_A()    
     #save_lam_A(PG_lam_A_arr)
     # load_lam_A(PG_lam_A_arr)
