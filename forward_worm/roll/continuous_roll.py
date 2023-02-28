@@ -12,7 +12,12 @@ import numpy as np
 import h5py
 
 # Local imports
-import forward_worm.roll.roll_parameter as roll_parameter
+
+from forward_worm.roll.roll_dirs import sim_dir, log_dr, sweep_dir
+
+
+from simple_worm_experiments.model_parameter import default_model_parameter
+
 from forward_worm.roll.roll_parameter import data_path, log_dir, output_dir
 from forward_worm.util import simulate_experiments, save_experiment_to_h5
 from simple_worm_experiments.roll.roll import RollManeuverExperiment
@@ -22,49 +27,30 @@ from parameter_scan import ParameterGrid
 from parameter_scan.util import load_grid_param, load_file_grid
 from mp_progress_logger import FWProgressLogger 
 
-    
-def sim_exp_wrapper(simulate,
-        save_raw_data,       
-        N_worker,
-        PG,
-        CS_func,
-        h5_filepath,
-        log_dir,
-        output_dir,
-        exper_spec,
-        overwrite,
-        debug):
-    '''
-    Runs parameter sweep over given parameter grid
-    '''
-        
-    PG.save(log_dir)
-        
-    if simulate:        
-        PGL = simulate_experiments(N_worker, 
-            PG, 
-            CS_func,
-            log_dir,
-            output_dir,
-            exper_spec = exper_spec,
-            overwrite = overwrite,
-            debug = debug)
+#------------------------------------------------------------------------------ 
+# Parameter
 
-        PGL.close()
-                
-    if save_raw_data: # Save raw simulation results to h5                                     
-        h5 = save_experiment_to_h5(PG, 
-            h5_filepath,
-            output_dir,
-            log_dir, 
-            FS_keys = ['x', 'theta', 'Omega', 'e1', 'e2', 'e3', 'w'], 
-            CS_keys = [])
+def continuous_roll_parameter():
     
-    else:        
-        assert not simulate, 'If simulate is True, save_raw_data must be True'
-        h5 = h5py.File(h5_filepath, 'r+')    
-    
-    return h5
+    parameter = default_model_parameter()
+            
+    parameter['A_dv'] = 6.0
+    parameter['f_dv'] = 5.0    
+
+    parameter['A_lr'] = 6.0
+    parameter['f_lr'] = 5.0    
+    parameter['phi'] = np.pi/2
+
+    parameter['Ds_h'] = None
+    parameter['s0_h'] = None
+
+    parameter['Ds_t'] = 1.0/32
+    parameter['s0_t'] = 0.25
+            
+    return parameter
+
+#------------------------------------------------------------------------------ 
+# Post processing
 
 def get_s_mask(parameter):
     '''
@@ -217,7 +203,7 @@ def compute_roll_frequency(h5, PG):
     return
 
 #------------------------------------------------------------------------------ 
-# Kinematic parameters
+# Simulations
     
 def sim_continuous_roll_A(N_worker, 
         simulate = True,
@@ -228,44 +214,44 @@ def sim_continuous_roll_A(N_worker,
     Parameter sweep over curvature amplitude
     '''
     
-    parameter = roll_parameter.get_continuous_roll_parameter()
+    param = continuous_roll_parameter()
     
-    N = 200
-    dt = 0.001
-    parameter['dt'] = dt
-    parameter['N'] = N
+    param['N'] = 100
+    param['dt'] = 0.01
         
     # Parameter Grid    
     A_min, A_max, A_step = 1.0, 7.0, 1.0
     T_min, T_max = 5.0, 40.0
     N_A = int((A_max - A_min) / A_step) + 1
         
-    A_dv_param = {'v_min': A_min, 'v_max': A_max + 0.1*A_step, 'N': None, 'step': A_step, 'round': 2}        
+    A_dv_param = {'v_min': A_min, 'v_max': A_max + 0.1*A_step, 
+        'N': None, 'step': A_step, 'round': 2}        
     A_lr_param = A_dv_param.copy()    
                 
-    T_param = {'v_min': T_min, 'v_max': T_max, 'N': N_A, 'step': None, 'round': 1, 'flip_lr': True}
+    T_param = {'v_min': T_min, 'v_max': T_max, 'N': N_A, 
+        'step': None, 'round': 1, 'flip_lr': True}
                             
     grid_param = {('A_dv', 'A_lr', 'T') : (A_dv_param, A_lr_param, T_param)}
     
-    PG = ParameterGrid(parameter, grid_param)
+    PG = ParameterGrid(param, grid_param)
         
-    s0_h = parameter['s0_h']
-    s0_t = parameter['s0_t']              
-    filename = f'continuous_roll_A_min={A_min}_A_max={A_max}_A_step={A_step}_N_{N}_dt_{dt}_s0_h_{s0_h}_s0_t_{s0_t}.h5'        
-    h5_filepath = join(data_path, 'parameter_sweeps', filename)
+    filename = (
+        f'continuous_roll_A_min={A_min}_A_max={A_max}_A_step={A_step}_'
+        f'A={parameter["A_dv"]}_s0_h={parameter["s0_h"]}_s0_t_{parameter["s0_t"]}_'
+        f'N_{param["N"]}_dt_{param["dt"]}')    
+    
+    h5_filepath = sweep_dir / filename
     exper_spec = 'RRE'
     
     h5 = sim_exp_wrapper(simulate,
-        save_raw_data,       
+        save_raw_data,                  
+        ['x', 'theta', 'Omega', 'sigma', 'w'],
+        ['Omega', 'sigma'],        
         N_worker,
         PG,
-        RollManeuverExperiment.continuous_roll,
-        h5_filepath,
-        log_dir,
-        output_dir,
-        exper_spec,
-        overwrite,
-        debug)
+        CoilingExperiment.continuous_coiling,
+        h5_filepath, log_dir, sim_dir,
+        exper_spec, overwrite, debug)
 
     # Analyse raw data and save results
     compute_roll_frequency(h5, PG)
@@ -283,7 +269,7 @@ def sim_continuous_roll_f(N_worker,
     Parameter sweep over muscle frequency
     '''
     # Default parameter
-    parameter = roll_parameter.get_continuous_roll_parameter()
+    param = continuous_roll_parameter()
         
     # Parameter grid to sweep over
     f_min, f_max, f_step = 1.0, 8.0, 1.0
@@ -297,24 +283,23 @@ def sim_continuous_roll_f(N_worker,
     
     PG = ParameterGrid(parameter, grid_param)
       
-    filename = (f'continuous_roll_f_min={f_min}_f_max={f_max}_f_step={f_step}'
-    f'_A={parameter["A_dv"]}_s0_h={parameter["s0_h"]}_s0_t_{parameter["s0_t"]}'
-    f'_N={parameter["N"]}_dt={parameter["dt"]}.h5')
-        
-    h5_filepath = join(data_path, 'parameter_sweeps', filename)
+    filename = (
+        f'continuous_roll_f_min={f_min}_f_max={f_max}_f_step={f_step}_'
+        f'A={parameter["A_dv"]}_s0_h={parameter["s0_h"]}_s0_t_{parameter["s0_t"]}_'
+        f'N={parameter["N"]}_dt={parameter["dt"]}.h5')
+
+    h5_filepath = sweep_dir / filename        
     exper_spec = 'CRE'
     
     h5 = sim_exp_wrapper(simulate,
-        save_raw_data,       
+        save_raw_data,                  
+        ['x', 'theta', 'Omega', 'sigma', 'w'],
+        ['Omega', 'sigma'],        
         N_worker,
         PG,
-        RollManeuverExperiment.continuous_roll,
-        h5_filepath,
-        log_dir,
-        output_dir,
-        exper_spec,
-        overwrite,
-        debug)
+        CoilingExperiment.continuous_coiling,
+        h5_filepath, log_dir, sim_dir,
+        exper_spec, overwrite, debug)
 
     # Analyse raw data and save results
     compute_roll_frequency(h5, PG)
@@ -330,42 +315,42 @@ def sim_continuous_roll_s0_t(N_worker,
     '''
     Parameter sweep over "neck" position
     '''
-    # default parameter
-    parameter = roll_parameter.get_continuous_roll_parameter()
-    parameter['dt'] = 0.01
-    parameter['N'] = 100
-    parameter['T'] = 10.0
-    parameter['A_dv'] = 5.0
-    parameter['A_lr'] = 5.0
+    # Default param
+    param = continuous_roll_parameter()
+    param['N'] = 100
+    param['dt'] = 0.01
+    param['T'] = 10.0
+    param['A_dv'] = 5.0
+    param['A_lr'] = 5.0
                           
     # Parameter grid to sweep over
     s0_t_min, s0_t_max, s0_t_step = 0.1, 0.3, 0.01 
     T_min, T_max = 5.0, 40.0
-    N_s0_t = int( (s0_t_max - s0_t_min) / s0_t_step + 0.1*s0_t_step) + 1
-    T_param = {'v_min': T_min, 'v_max': T_max, 'N': N_s0_t, 'step': None, 'round': 1, 'flip_lr': True}
     
+    N_s0_t = int( (s0_t_max - s0_t_min) / s0_t_step + 0.1*s0_t_step) + 1
+    T_param = {'v_min': T_min, 'v_max': T_max, 'N': N_s0_t, 'step': None, 'round': 1, 'flip_lr': True}    
     s0_t_param = {'v_min': s0_t_min, 'v_max': s0_t_max + 0.1*s0_t_step, 'N': None, 'step': s0_t_step, 'round': 2}                                    
     
     grid_param = {('s0_t', 'T'): (s0_t_param, T_param)}    
-    PG = ParameterGrid(parameter, grid_param)
-      
-    filename = (f'continuous_roll_s0_t_min={s0_t_min}_s0_t_max={s0_t_max}_s0_t_step={s0_t_step}_'
-    f'A={parameter["A_dv"]}_f={parameter["f_dv"]}_N={parameter["N"]}_dt={parameter["dt"]}.h5')
-        
-    h5_filepath = join(data_path, 'parameter_sweeps', filename)
+    PG = ParameterGrid(param, grid_param)
+
+    filename = (
+        f'continuous_roll_s0_t_min={s0_t_min}_s0_t_max={s0_t_max}_s0_t_step={s0_t_step}_'
+        f'A={param["A_dv"]}_f={param["f_dv"]}_'
+        f'N={param["N"]}_dt={param["dt"]}.h5')
+                
+    h5_filepath = sweep_dir / filename        
     exper_spec = 'CRE'
     
     h5 = sim_exp_wrapper(simulate,
-        save_raw_data,       
+        save_raw_data,                  
+        ['x', 'theta', 'Omega', 'sigma', 'w'],
+        ['Omega', 'sigma'],        
         N_worker,
         PG,
-        RollManeuverExperiment.continuous_roll,
-        h5_filepath,
-        log_dir,
-        output_dir,
-        exper_spec,
-        overwrite,
-        debug)
+        CoilingExperiment.continuous_coiling,
+        h5_filepath, log_dir, sim_dir,
+        exper_spec, overwrite, debug)
 
     # Analyse raw data and save results
     compute_roll_frequency(h5, PG)
@@ -379,52 +364,51 @@ def sim_continuous_roll_A_f(N_worker,
         overwrite = False,
         debug = False):
 
-    parameter = roll_parameter.get_continuous_roll_parameter()
-
-    N = 100
-    dt = 0.01    
-    parameter['N'] = N    
-    parameter['dt'] = 0.01
+    param = continuous_roll_parameter()
+    param['N'] = 100
+    param['dt'] = 0.01
 
     # Parameter Grid    
     A_min, A_max, A_step = 1.0, 7.0, 1.0
     T_min, T_max = 5.0, 40.0
     N_A = int((A_max - A_min) / A_step) + 1         
-    A_dv_param = {'v_min': A_min, 'v_max': A_max + 0.1*A_step, 'N': None, 'step': A_step, 'round': 2}        
+    A_dv_param = {'v_min': A_min, 'v_max': A_max + 0.1*A_step, 
+        'N': None, 'step': A_step, 'round': 2}        
     A_lr_param = A_dv_param.copy()    
-    T_param = {'v_min': T_min, 'v_max': T_max, 'N': N_A, 'step': None, 'round': 1, 'flip_lr': True}
+    
+    T_param = {'v_min': T_min, 'v_max': T_max, 
+        'N': N_A, 'step': None, 'round': 1, 'flip_lr': True}
 
     f_min, f_max, f_step = 2.0, 8.0, 2        
-    f_dv_param = {'v_min': f_min, 'v_max': f_max + 0.1*f_step, 'N': None, 'step': f_step, 'round': 0}        
+    f_dv_param = {'v_min': f_min, 'v_max': f_max + 0.1*f_step, 
+        'N': None, 'step': f_step, 'round': 0}        
     f_lr_param = f_dv_param.copy()    
                                 
     grid_param = {('A_dv', 'A_lr', 'T') : (A_dv_param, A_lr_param, T_param), 
-                  ('f_dv', 'f_lr') : (f_dv_param, f_lr_param)}
+        ('f_dv', 'f_lr') : (f_dv_param, f_lr_param)}
     
-    PG = ParameterGrid(parameter, grid_param)
+    PG = ParameterGrid(param, grid_param)
     
-    s0_h = parameter['s0_h']
-    s0_t = parameter['s0_t']            
-    filename = (f'continuous_roll_A_f_A_min={A_min}_A_max={A_max}_A_step={A_step}'
-    f'_f_min={f_min}_f_max={f_max}_f_step={f_step}_N_{N}_dt_{dt}_s0_h_{s0_h}_s0_t_{s0_t}.h5')               
+    filename = (
+        f'continuous_roll_A_min={A_min}_A_max={A_max}_A_step={A_step}_'
+        f'f_min={f_min}_f_max={f_max}_f_step={f_step}_'
+        f's0_h_{param["s0_h"]}_s0_t_{param["s0_t"]}_'
+        f'N_{param["N"]}_dt_{param["dt"]}.h5')                   
+    h5_filepath = sweep_dir / filename        
     
-    h5_filepath = join(data_path, 'parameter_sweeps', filename)
     exper_spec = 'RRE'
     
     h5 = sim_exp_wrapper(simulate,
-        save_raw_data,       
+        save_raw_data,                  
+        ['x', 'theta', 'Omega', 'sigma', 'w'],
+        ['Omega', 'sigma'],        
         N_worker,
         PG,
-        RollManeuverExperiment.continuous_roll,
-        h5_filepath,
-        log_dir,
-        output_dir,
-        exper_spec,
-        overwrite,
-        debug)
+        CoilingExperiment.continuous_coiling,
+        h5_filepath, log_dir, sim_dir,
+        exper_spec, overwrite, debug)
     
-    # Analyse raw data and save results
-        
+    # Analyse raw data and save results        
     compute_roll_frequency(h5, PG)    
     compute_roll_frequency_from_euler_angle(h5, PG)
 
@@ -442,10 +426,8 @@ def sim_continuous_roll_mu(N_worker,
     Simulate continuous roll experiments for different fluid viscosity mu    
     '''
 
-    parameter = roll_parameter.get_continuous_roll_parameter()
+    param = continuous_roll_parameter()
 
-    N, dt = 100, 0.01
-    parameter['N'], parameter['dt'] = N, dt    
     mu_min, mu_max = -3.0, 0.0
     N_mu = 10 
     T_min, T_max = 5.0, 20
@@ -459,26 +441,25 @@ def sim_continuous_roll_mu(N_worker,
         
     grid_param = {('mu','T') : (mu_param, T_param)}
     
-    PG = ParameterGrid(parameter, grid_param)
+    PG = ParameterGrid(param, grid_param)
                         
-    filename = (f'continuous_roll_mu_min={mu_min}_mu_max={mu_max}_N_mu={N_mu}_'
-    f'A_={parameter["A_dv"]}_f={parameter["f_dv"]}_s0_t={parameter["s0_t"]}_'
-    f's0_h={parameter["s0_h"]}_s0_t={parameter["s0_t"]}_N_{N}_dt_{dt}.h5')               
+    filename = (
+        f'continuous_roll_mu_min={mu_min}_mu_max={mu_max}_N_mu={N_mu}_'
+        f'A_={param["A_dv"]}_f={param["f_dv"]}_s0_t={param["s0_t"]}_'
+        f's0_h={param["s0_h"]}_s0_t={param["s0_t"]}_N_{N}_dt_{dt}.h5')               
     
-    h5_filepath = join(data_path, 'parameter_sweeps', filename)
+    h5_filepath = sweep_dir / filename        
     exper_spec = 'CRE'
     
     h5 = sim_exp_wrapper(simulate,
-        save_raw_data,       
+        save_raw_data,                  
+        ['x', 'theta', 'Omega', 'sigma', 'w'],
+        ['Omega', 'sigma'],        
         N_worker,
         PG,
-        RollManeuverExperiment.continuous_roll,
-        h5_filepath,
-        log_dir,
-        output_dir,
-        exper_spec,
-        overwrite,
-        debug)
+        CoilingExperiment.continuous_coiling,
+        h5_filepath, log_dir, sim_dir,
+        exper_spec, overwrite, debug)
     
     # Analyse raw data and save results        
     compute_roll_frequency(h5, PG)    
@@ -487,7 +468,7 @@ def sim_continuous_roll_mu(N_worker,
     return
 
 #------------------------------------------------------------------------------ 
-# Material parameter
+# Material param
 
 def sim_continuous_roll_E(N_worker, 
         simulate = True,
@@ -498,10 +479,8 @@ def sim_continuous_roll_E(N_worker,
     Simulate continuous roll experiments for different Young's modulus
     '''
     
-    parameter = roll_parameter.get_continuous_roll_parameter()
-
-    N, dt = 100, 0.001
-    parameter['N'], parameter['dt'] = N, dt    
+    param = continuous_roll_parameter()
+    
     E_min, E_max, E_step = 3.0, 6.01, 0.5 
     T_min, T_max = 5.0, 20.0 
               
@@ -527,26 +506,25 @@ def sim_continuous_roll_E(N_worker,
                                                     
     grid_param = {('E', 'G', 'eta', 'nu', 'T') : (E_param, G_param, eta_param, nu_param, T_param)}
     
-    PG = ParameterGrid(parameter, grid_param)
+    PG = ParameterGrid(param, grid_param)
                         
     filename = (f'continuous_roll_E_min={E_min}_E_max={E_max}_E_step={E_step}_'
-    f'c={c:.2f}_A_={parameter["A_dv"]}_f={parameter["f_dv"]}_s0_t={parameter["s0_t"]}_'
-    f's0_h={parameter["s0_h"]}_s0_t={parameter["s0_t"]}_N_{N}_dt_{dt}.h5')               
+        f'c={c:.2f}_A_={param["A_dv"]}_f={param["f_dv"]}_s0_t={param["s0_t"]}_'
+        f's0_h={param["s0_h"]}_s0_t={param["s0_t"]}'
+        f'_N_{param["N"]}_dt_{param["dt"]}.h5')               
     
-    h5_filepath = join(data_path, 'parameter_sweeps', filename)
+    h5_filepath = sweep_dir / filename        
     exper_spec = 'CRE'
     
     h5 = sim_exp_wrapper(simulate,
-        save_raw_data,       
+        save_raw_data,                  
+        ['x', 'theta', 'Omega', 'sigma', 'w'],
+        ['Omega', 'sigma'],        
         N_worker,
         PG,
-        RollManeuverExperiment.continuous_roll,
-        h5_filepath,
-        log_dir,
-        output_dir,
-        exper_spec,
-        overwrite,
-        debug)
+        CoilingExperiment.continuous_coiling,
+        h5_filepath, log_dir, sim_dir,
+        exper_spec, overwrite, debug)
     
     # Analyse raw data and save results        
     compute_roll_frequency(h5, PG)    
@@ -564,18 +542,16 @@ def sim_continuous_roll_E_p(N_worker,
     Poisson's ratio nu
     '''
 
-    parameter = roll_parameter.get_continuous_roll_parameter()
+    param = continuous_roll_parameter()
     
-    N, dt = 100, 0.001
-    parameter['N'], parameter['dt'] = N, dt    
-    E_min, E_max, E_step = 3.0, 6.01, 0.25 
+    E_min, E_max, E_step = 2.0, 6.0, 0.25 
     T_min, T_max = 5.0, 20.0 
               
     T_arr = linear_map_v2T(E_min, E_max, 
         T_max, T_min, E_step, 3.0, 7.00)   
 
     # Parameter Grid    
-    E_param = {'v_min': E_min, 'v_max': E_max, 'N': None, 
+    E_param = {'v_min': E_min, 'v_max': E_max + 0.1*E_step, 'N': None, 
         'step': E_step, 'round': 0, 'log': True}        
 
     eta_param = E_param.copy()
@@ -597,26 +573,25 @@ def sim_continuous_roll_E_p(N_worker,
         grid_param = {('E', 'G', 'eta', 'nu', 'T') : 
             (E_param, G_param, eta_param, nu_param, T_param)}
         
-        PG = ParameterGrid(parameter, grid_param)
+        PG = ParameterGrid(param, grid_param)
                         
-        filename = (f'continuous_roll_E_min={E_min}_E_max={E_max}_E_step={E_step}_'
-        f'p={p:.2f}_A_={parameter["A_dv"]}_f={parameter["f_dv"]}_s0_t={parameter["s0_t"]}_'
-        f's0_h={parameter["s0_h"]}_s0_t={parameter["s0_t"]}_N_{N}_dt_{dt}.h5')               
+        filename = (
+            f'continuous_roll_E_min={E_min}_E_max={E_max}_E_step={E_step}_'
+            f'p={p:.2f}_A={param["A_dv"]}_f={param["f_dv"]}_s0_t={param["s0_t"]}_'
+            f's0_h={param["s0_h"]}_s0_t={param["s0_t"]}_N_{param["N"]}_dt_{param["dt"]}.h5')               
     
-        h5_filepath = join(data_path, 'parameter_sweeps', filename)
+        h5_filepath = sweep_dir / filename        
         exper_spec = 'CRE'
     
         h5 = sim_exp_wrapper(simulate,
-            save_raw_data,       
+            save_raw_data,                  
+            ['x', 'theta', 'Omega', 'sigma', 'w'],
+            ['Omega', 'sigma'],        
             N_worker,
             PG,
-            RollManeuverExperiment.continuous_roll,
-            h5_filepath,
-            log_dir,
-            output_dir,
-            exper_spec,
-            overwrite,
-            debug)
+            CoilingExperiment.continuous_coiling,
+            h5_filepath, log_dir, sim_dir,
+            exper_spec, overwrite, debug)
     
         # Analyse raw data and save results        
         compute_roll_frequency(h5, PG)    
