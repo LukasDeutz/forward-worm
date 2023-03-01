@@ -18,22 +18,22 @@ from mp_progress_logger.custom_loggers import FWProgressLogger
 
 def default_sweep_parameter():
     '''
-    Default simulation parameter
+    Default sweep hyper parameter
     '''            
-    param = ArgumentParser(description = 'sim-parameter')
+    parser = ArgumentParser(description = 'sweep-parameter')
     
-    param.add_argument('--N_worker', type = int, default = 10,
+    parser.add_argument('--N_worker', type = int, default = 10,
         help = 'Number of processes') 
-    param.add_argument('--simulate', type = bool, default = True,
+    parser.add_argument('--simulate', type = bool, default = True,
         help = 'If true, simulations are run from scratch') 
-    param.add_argument('--save_raw_data', type = bool, default = True,
+    parser.add_argument('--save_raw_data', type = bool, default = True,
         help = 'If true, FrameSequences are pickled to disk') 
-    param.add_argument('--overwrite', type = bool, default = False,
+    parser.add_argument('--overwrite', type = bool, default = False,
         help = 'If true, already existing simulation results are overwritten')
-    param.add_argument('--debug', type = bool, default = False,
+    parser.add_argument('--debug', type = bool, default = False,
         help = 'If true, exception handling is turned off which is helpful for debugging')    
     
-    return param
+    return parser
 
 def simulate_experiments(N_worker, 
         PG, 
