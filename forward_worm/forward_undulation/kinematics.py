@@ -3,6 +3,9 @@ Created on 14 Feb 2023
 
 @author: lukas
 '''
+from sys import argv
+from simple_worm_experiments.model_parameter import default_model_parameter
+from argparse import ArgumentParser
 
 '''
 Created on 9 Feb 2023
@@ -11,17 +14,17 @@ Created on 9 Feb 2023
 '''
 
 #Third-party imports
-import h5py
 import numpy as np
 from scipy.integrate import trapezoid
 
 # Local imports
 from forward_worm.forward_undulation.undulations_dirs import log_dir, sim_dir, sweep_dir
-from forward_worm.util import simulate_experiments, save_experiment_to_h5, sim_exp_wrapper
+from forward_worm.util import sim_exp_wrapper
+from forward_worm.util import default_sweep_parameter
 
 from simple_worm_experiments.forward_undulation.undulation import UndulationExperiment
-from simple_worm_experiments.model_parameter import default_model_parameter
 from simple_worm_experiments.experiment_post_processor import EPP
+
 
 #from simple_worm_experiments.experiment_post_processor import EPP
 
@@ -29,28 +32,30 @@ from parameter_scan import ParameterGrid
 
 #------------------------------------------------------------------------------ 
 # Parameter
-
-def undulation_rft_parameter():
     
-    parameter = default_model_parameter()
-
-    # Default kinematic parameter
-    parameter['A'] = 5.0    
-    parameter['lam'] = 1.0
-    parameter['f'] = 2.0
-
-    # Gradual muscle onset at tale and
-    parameter['gmo'] = True              
-    parameter['Ds_h'], parameter['Ds_t'] = 0.01, 0.01 
-    parameter['s0_h'] = 3*parameter['Ds_h']
-    parameter['s0_t'] = 1 - 3 * parameter['Ds_t']
-
-    # Default fluid parameter
-    parameter['external_force'] = ['rft']    
-    parameter['rft'] = 'Whang'
-    parameter['mu'] = 1e-3
+def model_parameter_parser():
     
-    return parameter
+    model_param = default_model_parameter(as_dict=False)
+    
+    model_param.add_argument('--T', type=float, default=2.5,
+        help='Simulation time')
+    
+    # Muscle timescale
+    model_param.add_argument('--fmtc', type=bool, default=True,
+        help='If true, muscles switch on on a finite time scale')
+    model_param.add_argument('--tau_on', type=float, default = 0.1,
+        help='Muscle time scale')
+    model_param.add_argument('--t0_on', type=float, default = 5*0.1,
+        help='Sigmoid midpoint')
+        
+    # Kinematic parameter    
+    model_param.add_argument('--f', type=float, default=2.0,
+        help='Undulation frequency')
+    model_param.add_argument('--A', type=float, default=None,
+        help='Undulation amplitude')
+    model_param.add_argument('--lam', type=float, default=1.0,
+        help='Undulation wavelength')
+    return model_param
 
 #------------------------------------------------------------------------------ 
 # Post processing 
@@ -132,68 +137,68 @@ def compute_energy_per_undulation_period(
                 
     return
     
-#------------------------------------------------------------------------------ 
-# Kinematic parameters
-
-def sim_undulation_lam_c(N_worker, 
-        simulate = True,
-        save_raw_data = True,
-        overwrite = False,
-        debug = False):
+def sim_undulation_lam_c(argv):
     '''
     Parameter sweep over wavelength lam for fixed dimensionless ratio c=A/q  
     '''    
-    param = undulation_rft_parameter()
-    param['T'] = 2.5
-    param['N'] = 250
-    param['dt'] = 1e-3
-                
-    # Parameter Grid    
-    lam_min, lam_max, lam_step = 0.5, 2.0, 0.1
-        
-    lam_param = {'v_min': lam_min, 'v_max': lam_max + 0.1*lam_step, 'N': None, 'step': lam_step, 'round': 2}                                                
+    # parse sweep parameter
+    sweep_parser = default_sweep_parameter()    
+    sweep_parser.add_argument('--lam', 
+        type=float, nargs = 3, default=[0.5, 2.0, 0.1])    
+    sweep_parser.add_argument('--c', 
+        type=float, nargs=3, default=[0.5, 1.6, 0.1])     
+    sweep_param = sweep_parser.parse_args(argv)    
 
-    A_param = lam_param.copy()
-    A_param['inverse'] = True
-    A_param['round'] = 3
-    
-    c_arr = np.arange(0.5, 1.61, 0.1)
-
-    for c in c_arr:
-            
-        A_param['scale'] = 2.0 * np.pi * c
+    # parse model parameter and convert to dict
+    model_parser = model_parameter_parser()    
+    model_param = vars(model_parser.parse_known_args(argv)[0])
+                    
+    # Creare parameter Grid            
+    lam_min, lam_max = sweep_param.lam[0], sweep_param.lam[1]   
+    lam_step = sweep_param.lam[2]        
+    c_min, c_max = sweep_param.c[0], sweep_param.c[1]
+    c_step = sweep_param.c[2] 
                 
-        grid_param = {('lam', 'A'): (lam_param, A_param)}
+    lam_param = {'v_min': lam_min, 'v_max': lam_max + 0.1*lam_step, 
+        'N': None, 'step': lam_step, 'round': 2}                                                
+    c_param = {'v_min': c_min, 'v_max': c_max + 0.1*c_step, 
+        'N': None, 'step': c_step, 'round': 2}                                                
     
-        PG = ParameterGrid(param, grid_param)
+    grid_param = {'lam': lam_param, 'c': c_param}
+
+    PG = ParameterGrid(model_param, grid_param)
+
+    # Run sweep
+    filename = (
+        f'undulation_lam_min={lam_min}_lam_max={lam_max}_lam_step={lam_step}_'
+        f'c_min={lam_min}_c_max={lam_max}_c_step={lam_step}_'
+        f'f={model_param["f"]}_mu_{model_param["mu"]}_'
+        f'N={model_param["N"]}_dt={model_param["dt"]}.h5')        
+
+    h5_filepath = sweep_dir / filename 
+    exper_spec = 'UE'
         
-        filename = (f'undulation_lam_min={lam_min}_lam_max={lam_max}_lam_step={lam_step}'
-            f'_c={c:.2f}_f={param["f"]}_mu_{param["mu"]}_N={param["N"]}_dt={param["dt"]}.h5')        
-            
-        h5_filepath = sweep_dir / filename 
-        exper_spec = 'UE'
-            
-        h5 = sim_exp_wrapper(simulate, 
-            save_raw_data,       
-            ['x', 'Omega', 'sigma', 
-            'V_dot_k', 'V_dot_sig', 'D_k', 'D_sig', 
-            'dot_W_F_lin', 'dot_W_F_rot', 
-            'dot_W_M_lin', 'dot_W_M_rot'],
-            ['Omega', 'sigma'],
-            N_worker, 
-            PG, 
-            UndulationExperiment.sinusoidal_traveling_wave_control_sequence,
-            h5_filepath,
-            log_dir,
-            sim_dir,
-            exper_spec,
-            overwrite,
-            debug)
+    h5 = sim_exp_wrapper(sweep_param.simulate, 
+        sweep_param.save_raw_data,       
+        ['x', 'Omega', 'sigma',
+        'V_dot_k', 'V_dot_sig', 'D_k', 'D_sig', 
+        'dot_W_F_lin', 'dot_W_F_rot', 
+        'dot_W_M_lin', 'dot_W_M_rot'],
+        ['Omega', 'sigma'],
+        sweep_param.N_worker, 
+        PG, 
+        UndulationExperiment.sinusoidal_traveling_wave_control_sequence,
+        h5_filepath,
+        log_dir,
+        sim_dir,
+        exper_spec,
+        sweep_param.overwrite,
+        sweep_param.debug)
+    
+    compute_swimming_speed(h5, PG)
+    compute_energy_per_undulation_period(h5, PG)
         
-        compute_swimming_speed(h5, PG)
-        compute_energy_per_undulation_period(h5, PG)
-        
-        h5.close()
+    h5.close()
                                                                                             
     return 
 
@@ -202,8 +207,6 @@ def sim_undulation_lam_c_eta_nu(N_worker,
         save_raw_data = True,
         overwrite = False,
         debug = False):
-
-    lam_min, lam_max, lam_step = 0.5, 2.0, 0.1
 
     param = undulation_rft_parameter()
     param['T'] = 2.5
@@ -265,11 +268,8 @@ def sim_undulation_lam_c_eta_nu(N_worker,
     
 if __name__ == '__main__':
         
-    N_worker = 16
-        
-    # sim_undulation_lam_c(N_worker, simulate = True,
-    #         save_raw_data = True, overwrite = False, debug = False)    
+    sim_undulation_lam_c(argv)    
     
-    sim_undulation_lam_c_eta_nu(N_worker, simulate = True,
-            save_raw_data = True, overwrite = False, debug = False)
+    # sim_undulation_lam_c_eta_nu(N_worker, simulate = True,
+    #         save_raw_data = True, overwrite = False, debug = False)
     
