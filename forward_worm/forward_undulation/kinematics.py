@@ -45,6 +45,7 @@ def model_parameter_parser():
         help='Undulation amplitude')
     model_param.add_argument('--lam', type=float, default=1.0,
         help='Undulation wavelength')
+    
     return model_param
 
 #------------------------------------------------------------------------------ 
@@ -141,6 +142,7 @@ def sim_lam_c(argv):
 
     # parse model parameter and convert to dict
     model_parser = model_parameter_parser()    
+    model_parser.print_help()
     model_param = vars(model_parser.parse_known_args(argv)[0])
                     
     # Creare parameter Grid            
@@ -161,7 +163,7 @@ def sim_lam_c(argv):
     # Run sweep
     filename = (
         f'undulation_lam_min={lam_min}_lam_max={lam_max}_lam_step={lam_step}_'
-        f'c_min={lam_min}_c_max={lam_max}_c_step={lam_step}_'
+        f'c_min={c_min}_c_max={c_max}_c_step={c_step}_'
         f'f={model_param["f"]}_mu_{model_param["mu"]}_'
         f'N={model_param["N"]}_dt={model_param["dt"]}.h5')        
 
