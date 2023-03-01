@@ -4,14 +4,7 @@ Created on 14 Feb 2023
 @author: lukas
 '''
 from sys import argv
-from simple_worm_experiments.model_parameter import default_model_parameter
 from argparse import ArgumentParser
-
-'''
-Created on 9 Feb 2023
-
-@author: lukas
-'''
 
 #Third-party imports
 import numpy as np
@@ -22,12 +15,9 @@ from forward_worm.forward_undulation.undulations_dirs import log_dir, sim_dir, s
 from forward_worm.util import sim_exp_wrapper
 from forward_worm.util import default_sweep_parameter
 
+from simple_worm_experiments.model_parameter import default_model_parameter
 from simple_worm_experiments.forward_undulation.undulation import UndulationExperiment
 from simple_worm_experiments.experiment_post_processor import EPP
-
-
-#from simple_worm_experiments.experiment_post_processor import EPP
-
 from parameter_scan import ParameterGrid
 
 #------------------------------------------------------------------------------ 
@@ -41,7 +31,7 @@ def model_parameter_parser():
         help='Simulation time')
     
     # Muscle timescale
-    model_param.add_argument('--fmtc', type=bool, default=True,
+    model_param.add_argument('--fmts', type=bool, default=True,
         help='If true, muscles switch on on a finite time scale')
     model_param.add_argument('--tau_on', type=float, default = 0.1,
         help='Muscle time scale')
@@ -137,7 +127,7 @@ def compute_energy_per_undulation_period(
                 
     return
     
-def sim_undulation_lam_c(argv):
+def sim_lam_c(argv):
     '''
     Parameter sweep over wavelength lam for fixed dimensionless ratio c=A/q  
     '''    
@@ -147,7 +137,7 @@ def sim_undulation_lam_c(argv):
         type=float, nargs = 3, default=[0.5, 2.0, 0.1])    
     sweep_parser.add_argument('--c', 
         type=float, nargs=3, default=[0.5, 1.6, 0.1])     
-    sweep_param = sweep_parser.parse_args(argv)    
+    sweep_param = sweep_parser.parse_known_args(argv)[0]    
 
     # parse model parameter and convert to dict
     model_parser = model_parameter_parser()    
@@ -185,7 +175,7 @@ def sim_undulation_lam_c(argv):
         'dot_W_F_lin', 'dot_W_F_rot', 
         'dot_W_M_lin', 'dot_W_M_rot'],
         ['Omega', 'sigma'],
-        sweep_param.N_worker, 
+        sweep_param.worker, 
         PG, 
         UndulationExperiment.sinusoidal_traveling_wave_control_sequence,
         h5_filepath,
@@ -202,7 +192,7 @@ def sim_undulation_lam_c(argv):
                                                                                             
     return 
 
-def sim_undulation_lam_c_eta_nu(N_worker, 
+def sim_lam_c_eta_nu(N_worker, 
         simulate = True,
         save_raw_data = True,
         overwrite = False,
@@ -263,13 +253,19 @@ def sim_undulation_lam_c_eta_nu(N_worker,
         overwrite,
         debug)
 
+    h5.close()
     
     return
     
 if __name__ == '__main__':
-        
-    sim_undulation_lam_c(argv)    
     
-    # sim_undulation_lam_c_eta_nu(N_worker, simulate = True,
-    #         save_raw_data = True, overwrite = False, debug = False)
+    parser = ArgumentParser()
+    parser.add_argument('-sim',  
+        type = str, 
+        choices = ['sim_lam_c', 'sim_lam_c_eta_nu'], 
+        help='Simulation function to call')
+    # Run function passed via command line
+    args = parser.parse_known_args(argv)[0]    
+    globals()[args.sim](argv)
+        
     
