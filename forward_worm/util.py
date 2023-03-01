@@ -22,7 +22,7 @@ def default_sweep_parameter():
     '''            
     parser = ArgumentParser(description = 'sweep-parameter')
     
-    parser.add_argument('--N_worker', type = int, default = 10,
+    parser.add_argument('--worker', type = int, default = 10,
         help = 'Number of processes') 
     parser.add_argument('--simulate', type = bool, default = True,
         help = 'If true, simulations are run from scratch') 
