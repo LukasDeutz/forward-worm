@@ -71,19 +71,16 @@ def plot_undulation_speed_and_muscle_work(h5_filename, show = False):
     U_mat = np.zeros((len(c_arr), len(lam_arr)))
     W_M_mat = np.zeros_like(U_mat)
     
-    U_arr = h5['U'][:] / PG.base_parameter['f'] 
-    W_M_arr = h5['energies']['abs_W_M'][:]
-        
-    W_M_mat[i, :] = W_M_arr                         
-    U_mat[i, :] = U_arr
-    h5.close()
-    
+    # rows iterate over lambda, columns over c
+    U_mat = h5['U'][:].reshape(PG.shape)
+    W_M_mat = h5['energies']['abs_W_M'][:].reshape(PG.shape)
+            
     # Fit maximal speed using spline
     # Use maximum speed on grid as initial guess 
     j_max, i_max = np.unravel_index(np.argmax(U_mat), U_mat.shape)
     x0 = np.array([lam_arr[i_max], c_arr[j_max]])                      
     
-    func = RectBivariateSpline(lam_arr, c_arr, -U_mat.T)    
+    func = RectBivariateSpline(lam_arr, c_arr, -U_mat)    
     func_wrap = lambda x: func(x[0], x[1])[0]
     
     res = minimize(func_wrap, x0)
@@ -99,14 +96,14 @@ def plot_undulation_speed_and_muscle_work(h5_filename, show = False):
     cb_fz = 16 # colorbar fontsize
     
     LAM, C  = np.meshgrid(lam_arr, c_arr)        
-    CS = ax0.contourf(LAM, C, U_mat, levels, cmap = mpl.cm.get_cmap('plasma'))
-    ax0.contour(LAM, C, U_mat, levels, linestyles = '-', colors = ('k',))    
+    CS = ax0.contourf(LAM, C, U_mat.T, levels, cmap = plt.cm.plasma)
+    ax0.contour(LAM, C, U_mat.T, levels, linestyles = '-', colors = ('k',))    
     ax0.plot(res.x[0], res.x[1], 'x', c = 'k', ms = '10')
     cbar = plt.colorbar(CS, ax = ax0)
     cbar.set_label('$U$', fontsize = cb_fz)
     
-    CS = ax1.contourf(LAM, C, W_M_mat, levels, cmap = mpl.cm.get_cmap('cividis'))
-    ax1.contour(LAM, C, W_M_mat, levels, linestyles = '-', colors = ('k',))    
+    CS = ax1.contourf(LAM, C, W_M_mat.T, levels, cmap = mpl.cm.get_cmap('cividis'))
+    ax1.contour(LAM, C, W_M_mat.T, levels, linestyles = '-', colors = ('k',))    
     cbar = plt.colorbar(CS, ax = ax1)
     cbar.set_label('$W_\mathrm{M}$', fontsize = cb_fz)
                 
@@ -469,17 +466,14 @@ if __name__ == '__main__':
 
 #------------------------------------------------------------------------------ 
 # Plotting    
-    c_arr = np.arange(0.5, 1.61, 0.1)    
-    
-    N = 250
-    dt = 1e-3    
-    h5_filenames = [
-f'undulation_lam_min=0.5_lam_max=2.0_lam_step=0.1_c={c:.2f}_f=2.0_mu_0.001_N={N}_dt={dt}.h5'       
-#f'undulation_lam_min=0.5_lam_max=2.0_lam_step=0.1_c={c:.2f}_f=2.0_mu_0.001_N=100_dt=0.01.h5'               
-        for c in c_arr]
-        
-    # plot_undulation_speed_and_muscle_work(h5_filenames, c_arr, show = False)        
-    plot_input_output_energy_balance(h5_filenames, c_arr, show = False)
+    h5_filename = (f'undulation_'
+        f'lam_min=0.5_lam_max=2.0_lam_step=0.1_'
+        f'c_min=0.5_c_max=1.6_c_step=0.1_f=2.0_'
+        f'mu_0.001_N=100_dt=0.01.h5'
+        )
+
+    plot_undulation_speed_and_muscle_work(h5_filename, show = True)        
+    #plot_input_output_energy_balance(h5_filenames, c_arr, show = False)
     #plot_energy_costs(h5_filenames, c_arr, show = False)
         
     #plot_power_balance(h5_filenames[5])
