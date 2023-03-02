@@ -58,27 +58,25 @@ def generate_worm_videos(h5_filename):
 #------------------------------------------------------------------------------ 
 # Results
 
-def plot_undulation_speed_and_muscle_work(h5_filenames, c_arr, show = False):
+def plot_undulation_speed_and_muscle_work(h5_filename, show = False):
     '''
     Plots normalized undulation speed and mechanical muscle work done per 
     undulation cycle
     '''
             
-    h5, PG  = load_h5_file(h5_filenames[0])
+    h5, PG  = load_h5_file(h5_filename)
     lam_arr = PG.v_from_key('lam')
-      
+    c_arr = PG.v_from_key('c')
+    
     U_mat = np.zeros((len(c_arr), len(lam_arr)))
     W_M_mat = np.zeros_like(U_mat)
     
-    for i, fn in enumerate(h5_filenames):
-    
-        h5, PG = load_h5_file(fn)
-        U_arr = h5['U'][:] / PG.base_parameter['f'] 
-        W_M_arr = h5['energies']['abs_W_M'][:]
+    U_arr = h5['U'][:] / PG.base_parameter['f'] 
+    W_M_arr = h5['energies']['abs_W_M'][:]
         
-        W_M_mat[i, :] = W_M_arr                         
-        U_mat[i, :] = U_arr
-        h5.close()
+    W_M_mat[i, :] = W_M_arr                         
+    U_mat[i, :] = U_arr
+    h5.close()
     
     # Fit maximal speed using spline
     # Use maximum speed on grid as initial guess 
@@ -101,13 +99,13 @@ def plot_undulation_speed_and_muscle_work(h5_filenames, c_arr, show = False):
     cb_fz = 16 # colorbar fontsize
     
     LAM, C  = np.meshgrid(lam_arr, c_arr)        
-    CS = ax0.contourf(LAM, C, U_mat, levels, cmap = plt.cm.plasma)
+    CS = ax0.contourf(LAM, C, U_mat, levels, cmap = mpl.cm.get_cmap('plasma'))
     ax0.contour(LAM, C, U_mat, levels, linestyles = '-', colors = ('k',))    
     ax0.plot(res.x[0], res.x[1], 'x', c = 'k', ms = '10')
     cbar = plt.colorbar(CS, ax = ax0)
     cbar.set_label('$U$', fontsize = cb_fz)
     
-    CS = ax1.contourf(LAM, C, W_M_mat, levels, cmap = plt.cm.cividis)
+    CS = ax1.contourf(LAM, C, W_M_mat, levels, cmap = mpl.cm.get_cmap('cividis'))
     ax1.contour(LAM, C, W_M_mat, levels, linestyles = '-', colors = ('k',))    
     cbar = plt.colorbar(CS, ax = ax1)
     cbar.set_label('$W_\mathrm{M}$', fontsize = cb_fz)
