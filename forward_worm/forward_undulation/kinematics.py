@@ -142,7 +142,6 @@ def sim_lam_c(argv):
 
     # parse model parameter and convert to dict
     model_parser = model_parameter_parser()    
-    model_parser.print_help()
     model_param = vars(model_parser.parse_known_args(argv)[0])
                     
     # Creare parameter Grid            
