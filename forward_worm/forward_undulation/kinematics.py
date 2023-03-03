@@ -143,7 +143,11 @@ def sim_lam_c(argv):
     # parse model parameter and convert to dict
     model_parser = model_parameter_parser()    
     model_param = vars(model_parser.parse_known_args(argv)[0])
-                    
+    
+    # print parameter which have been set
+    print({k: v for k, v in 
+        model_param.items() if v != model_parser.get_default(k)})
+                        
     # Creare parameter Grid            
     lam_min, lam_max = sweep_param.lam[0], sweep_param.lam[1]   
     lam_step = sweep_param.lam[2]        
