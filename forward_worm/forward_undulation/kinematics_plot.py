@@ -18,6 +18,8 @@ from parameter_scan import ParameterGrid
 from simple_worm_experiments.experiment_post_processor import EPP
 from simple_worm.plot3d_cosserat import plot_CS_vs_FS, plot_multiple_scalar_fields
 from scipy.integrate._quadrature import trapezoid
+from tensorboard.compat.proto import step_stats_pb2
+import itertools
 
 #------------------------------------------------------------------------------ 
 
@@ -238,9 +240,10 @@ def plot_input_output_energy_balance(h5_filename, show = False):
 
     CS = ax2.contourf(LAM, C, err, levels, cmap = plt.cm.cividis)
     ax2.contour(LAM, C, err, levels, linestyles = '-', colors = ('k',))    
-    ax1.set_ylabel(r'$c$', fontsize = fz)        
+    ax2.set_ylabel(r'$c$', fontsize = fz)        
     cbar = plt.colorbar(CS, ax = ax2)
     cbar.set_label('$\log(\mathrm{rel Error})$', fontsize = cb_fz)
+    ax2.set_xlabel(r'$\lambda$', fontsize = fz)        
                                                            
     if show: plt.show()
     
@@ -250,10 +253,10 @@ def plot_input_output_energy_balance(h5_filename, show = False):
 
     return    
 
-def plot_true_energy_costs(h5_filenames, c_arr, show = False):
+def plot_true_energy_costs(h5_filename, c_arr, show = False):
     '''
-    True energy costs are computed by accounting for released potential
-    at any point in time.
+    True energy costs are computed by distinguishing between potential energy 
+    that is stored or released at any point in time.
     
     If the released potential is larger than the dissipation rate then
     the muscles need to work against the passive restoring forces and 
@@ -270,21 +273,17 @@ def plot_true_energy_costs(h5_filenames, c_arr, show = False):
     :param show (bool): If true, show plot
     '''
         
-    h5, PG  = load_h5_file(h5_filenames[0])
+    h5, PG  = load_h5_file(h5_filename)
     lam_arr = PG.v_from_key('lam')
+    c_arr = PG.v_from_key('c')
     LAM, C  = np.meshgrid(lam_arr, c_arr)        
-
-    T_undu = 1.0 / PG.base_parameter['f']    
 
     W_M_mat = np.zeros_like(LAM)
     E_out_mat = np.zeros_like(LAM)
-                                              
-    for i, fn in enumerate(h5_filenames):
-    
-        h5, _ = load_h5_file(fn)
-                
-        W_M_mat[i, :] = h5['energies']['abs_W_M'][:]           
-        E_out_mat[i, :] = -h5['energy-costs']['E_out'][:]
+
+    # rows iterate over lambda, columns over c
+    W_M_mat = h5['energies']['abs_W_M'][:].reshape(PG.shape).T
+    E_out_mat = h5['energies']['E_out'][:].reshape(PG.shape).T
                                                             
     # Plot    
     fig = plt.figure(figsize = (10, 14))
@@ -381,68 +380,86 @@ def plot_power_balance(h5_filename,
             
     return
 
-def plot_true_powers(h5_filename, 
-        N_plot = 4,
-        show = False):
+def potential():
     
-    h5, PG  = load_h5_file(h5_filenames[0])
+    lam_arr = np.linspace(0.5, 2.0, 10)
+    A_arr = np.linspace(1.0, 12.0, 13)
+    f = 2.0
+    
+    t_arr = np.linspace(0, 2.5, 1e3)        
+    
+    for lam, A in itertools.product(lam_arr, A_arr):
+        for t in t_arr:
+            q = lam / (2 * np.pi)
+                
+            k = lambda s: A*np.sin(q*s - ome)
+        
+        pass
+    
+    return    
+        
+    
+    
+    
+    
+    
+
+
+def plot_true_powers(
+        h5_filename, 
+        N_plot = 4,
+        show = False
+    ):
+    
+    h5, PG  = load_h5_file(h5_filename)
     lam_arr = PG.v_from_key('lam')    
+    c_arr = PG.v_from_key('c')    
+    LAM, C  = np.meshgrid(lam_arr, c_arr)        
+                
+    W_M_mat = h5['energies']['D'][:].reshape(PG.shape).T
+                        
+    lam_idx_arr = np.linspace(0, PG.shape[0], N_plot, 
+        endpoint=False, dtype = int)
+    c_idx_arr = np.linspace(0, PG.shape[1], N_plot,
+        endpoint=False, dtype = int)
+            
     T_undu = 1.0 / PG.base_parameter['f']
         
     N_undu = np.round(PG.base_parameter['T'] / T_undu - 1.0)
                 
-    N_sim = h5['FS']['V_dot_k'].shape[0]
-    
-    if N_plot > N_sim: N_plot = N_sim
-    
-    sim_idx_arr = np.linspace(0, N_sim-1, N_plot, dtype = int)
+    plt.figure(figsize = (N_plot*6, 2*N_plot*6))
+    gs = plt.GridSpec(N_plot, 2*N_plot)    
+    ax0 = plt.subplot(gs[:N_plot, :N_plot])
 
-    plt.figure(figsize = (12, N_plot*6))
-    gs = plt.GridSpec(N_plot, 2)
+    levels = 10
+    LAM, C  = np.meshgrid(lam_arr, c_arr)        
+    CS = ax0.contourf(LAM, C, W_M_mat, levels, cmap = plt.cm.plasma)
+    ax0.contour(LAM, C, W_M_mat, levels, linestyles = '-', colors = ('k',))    
+    cbar = plt.colorbar(CS, ax = ax0)
+    cbar.set_label(r'$|W|$', fontsize = 18)
 
-    powers, t = EPP.powers_from_h5(h5, t_start = T_undu)
-    dt = t[1]-t[0]
+    for lam in lam_arr[lam_idx_arr]: 
+        for c in c_arr[c_idx_arr]:
+            ax0.plot(lam, c, 'x', c='k', ms=10)
+
+    powers, t = EPP.powers_from_h5(h5, t_start = 2*T_undu)
+    dot_V_arr, dot_D_arr, dot_W_F_arr = EPP.comp_true_powers(powers)                 
+    
+    #dot_W_M_arr = np.abs(np.abs(powers['dot_W_M_F'] + powers['dot_W_M_T']))
+    for i, lam_idx in enumerate(lam_idx_arr):
+        for j, c_idx in enumerate(c_idx_arr):
             
-    dot_V_arr, dot_D_arr, dot_W_F_arr = EPP.comp_true_powers(powers)     
-    dot_W_M_arr = - np.abs(powers['dot_W_M_F'] + powers['dot_W_M_T'])
-        
-    for i, sim_idx in enumerate(sim_idx_arr):
-                
-        ax0 = plt.subplot(gs[i, 0])
-        ax1 = plt.subplot(gs[i, 1])
-        # ax2 = plt.subplot(gs[i, 2])
-                         
-        dot_V = dot_V_arr[sim_idx, :] 
-        dot_D = dot_D_arr[sim_idx, :]
-        dot_W_F = dot_W_F_arr[sim_idx, :]                                         
-        ax0.plot(t, dot_V, label = r'$\dot{V}$', c = 'g')
-        ax0.plot(t, dot_D, label = r'$\dot{D}$', c = 'r')
-        ax0.plot(t, dot_W_F, label = r'$\dot{W}_F$', c = 'b')
-        
-        ax1.plot(t, dot_W_M_arr[sim_idx, :])
-        ax1.plot(t, dot_V + dot_D + dot_W_F)
-                                
-        # V = trapezoid(dot_V, dx = dt) / N_undu
-        # D = trapezoid(dot_V, dx = dt) / N_undu
-        # W_F = trapezoid(dot_W_F, dx = dt) / N_undu
-
-        # ax1.plot(t, -dot_V + dot_D + dot_W_F, c = 'k')
-        # ax1.plot(t, dot_W_M, c = 'g')
-        # ax2.semilogy(t, np.abs(-dot_V + dot_D + dot_W_F + dot_W_M) / np.abs(dot_W_M), c = 'k')
-
-        ax0.set_ylabel(fr'$\lambda = {lam_arr[sim_idx]:.2f}$', fontsize = 20)
-
-    ax0.set_xlabel(r'$t$', fontsize = 20)
-    # ax1.set_xlabel(r'$t$', fontsize = 20)
-    # ax2.set_xlabel(r'$t$', fontsize = 20)
-    
-    ax0.legend()                
-    plt.show()
-
+            k = np.ravel_multi_index((i, j), PG.shape)
+            ax = plt.subplot(gs[N_plot-j-1, N_plot+i])            
+            ax.plot(t, dot_V_arr[k, :], c ='g')
+            ax.plot(t, dot_D_arr[k, :], c = 'r')
+            #ax.plot(t, dot_W_F_arr[k, :], c = 'b')
+                    
+    if show: plt.show()                                                    
     filename = 'input_output_power_balance_lam_c.png'
     plt.savefig(fig_dir / filename)
 
-           
+    return
 
 
 
@@ -462,15 +479,21 @@ if __name__ == '__main__':
     #     f'c_min=0.5_c_max=1.6_c_step=0.1_f=2.0_'
     #     f'mu_0.001_N=100_dt=0.01.h5'
     #     )
-    
-    h5_filename = (f'undulation_'
-        'lam_min=0.5_lam_max=2.0_lam_step=0.1_'
-        'c_min=0.5_c_max=1.6_c_step=0.1'
-        '_f=2.0_mu_0.001_N=250_dt=0.0001.h5')
 
-    plot_undulation_speed_and_muscle_work(h5_filename, show = True)        
+    h5_filename = ('undulation_'
+        'lam_min=0.5_lam_max=2.0_lam_step=0.1_'
+        'c_min=0.5_c_max=1.6_c_step=0.1_'
+        'f=2.0_mu_0.001_N=250_dt=0.001.h5')
     
-    plot_input_output_energy_balance(h5_filenames, c_arr, show = False)
+    # h5_filename = (f'undulation_'
+    #     'lam_min=0.5_lam_max=2.0_lam_step=0.1_'
+    #     'c_min=0.5_c_max=1.6_c_step=0.1'
+    #     '_f=2.0_mu_0.001_N=250_dt=0.0001.h5')
+
+    #plot_undulation_speed_and_muscle_work(h5_filename, show = True)            
+    plot_input_output_energy_balance(h5_filename, show = True)
+    # plot_true_powers(h5_filename, show=True)
+    
     #plot_energy_costs(h5_filenames, c_arr, show = False)
         
     #plot_power_balance(h5_filenames[5])
