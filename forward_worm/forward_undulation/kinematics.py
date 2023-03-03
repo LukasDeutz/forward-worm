@@ -130,7 +130,7 @@ def compute_energy_per_undulation_period(
     
 def sim_lam_c(argv):
     '''
-    Parameter sweep over wavelength lam for fixed dimensionless ratio c=A/q  
+    Parameter sweep over wavelength lam amplitude wavenumber ratio c=A/q  
     '''    
     # parse sweep parameter
     sweep_parser = default_sweep_parameter()    
@@ -192,6 +192,74 @@ def sim_lam_c(argv):
     h5.close()
                                                                                             
     return 
+
+def sim_lam_c_f(argv):
+    '''
+    Parameter sweep over wavelength lam amplitude wavenumber ratio c=A/q and undulation frequency  
+    '''    
+    # parse sweep parameter
+    sweep_parser = default_sweep_parameter()    
+    sweep_parser.add_argument('--lam', 
+        type=float, nargs = 3, default=[0.5, 2.0, 0.1])    
+    sweep_parser.add_argument('--c', 
+        type=float, nargs=3, default=[0.5, 1.6, 0.1])     
+    sweep_param = sweep_parser.parse_known_args(argv)[0]    
+    sweep_parser.add_argument('--f', 
+        type=float, nargs=3, default=[0.5, 2.0, 0.5])     
+    sweep_param = sweep_parser.parse_known_args(argv)[0]    
+
+    # parse model parameter and convert to dict
+    model_parser = model_parameter_parser()    
+    model_param = vars(model_parser.parse_known_args(argv)[0])
+                                
+    # Creare parameter Grid            
+    lam_min, lam_max = sweep_param.lam[0], sweep_param.lam[1]   
+    lam_step = sweep_param.lam[2]        
+    c_min, c_max = sweep_param.c[0], sweep_param.c[1]
+    c_step = sweep_param.c[2] 
+    f_min, f_max = sweep_param.f[0], sweep_param.f[1]
+    f_step = sweep_param.f[2] 
+            
+    lam_param = {'v_min': lam_min, 'v_max': lam_max + 0.1*lam_step, 
+        'N': None, 'step': lam_step, 'round': 2}                                                
+    c_param = {'v_min': c_min, 'v_max': c_max + 0.1*c_step, 
+        'N': None, 'step': c_step, 'round': 2}                                                
+    f_param = {'v_min': f_min, 'v_max': f_max + 0.1*f_step, 
+        'N': None, 'step': f_step, 'round': 2}                                                
+    
+    grid_param = {'lam': lam_param, 'c': c_param, 'f': f_param}
+
+    PG = ParameterGrid(model_param, grid_param)
+
+    filename = (
+        f'undulation_lam_min={lam_min}_lam_max={lam_max}_lam_step={lam_step}_'
+        f'c_min={lam_min}_c_max={lam_max}_c_step={lam_step}_'
+        f'f_min={f_min}_f_max={f_max}_f_step={f_step}_'                
+        f'mu_{model_param["mu"]}_N={model_param["N"]}_dt={model_param["dt"]}.h5')        
+        
+    h5_filepath = sweep_dir / filename 
+    exper_spec = 'UE'
+        
+    h5 = sim_exp_wrapper(sweep_param.simulate, 
+        sweep_param.save_raw_data,       
+        ['x', 'Omega', 'sigma',
+        'V_dot_k', 'V_dot_sig', 'D_k', 'D_sig', 
+        'dot_W_F_lin', 'dot_W_F_rot', 
+        'dot_W_M_lin', 'dot_W_M_rot'],
+        ['Omega', 'sigma'],
+        sweep_param.worker, 
+        PG, 
+        UndulationExperiment.sinusoidal_traveling_wave_control_sequence,
+        h5_filepath,
+        log_dir,
+        sim_dir,
+        exper_spec,
+        sweep_param.overwrite,
+        sweep_param.debug)
+
+    h5.close()
+    
+    return
 
 def sim_lam_c_eta_nu(N_worker, 
         simulate = True,
@@ -263,7 +331,7 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('-sim',  
         type = str, 
-        choices = ['sim_lam_c', 'sim_lam_c_eta_nu'], 
+        choices = ['sim_lam_c', 'sim_lam_c_f', 'sim_lam_c_eta_nu'], 
         help='Simulation function to call')
     # Run function passed via command line
     args = parser.parse_known_args(argv)[0]    
