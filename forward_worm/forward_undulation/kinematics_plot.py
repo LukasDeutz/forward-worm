@@ -67,10 +67,7 @@ def plot_undulation_speed_and_muscle_work(h5_filename, show = False):
     h5, PG  = load_h5_file(h5_filename)
     lam_arr = PG.v_from_key('lam')
     c_arr = PG.v_from_key('c')
-    
-    U_mat = np.zeros((len(c_arr), len(lam_arr)))
-    W_M_mat = np.zeros_like(U_mat)
-    
+        
     # rows iterate over lambda, columns over c
     U_mat = h5['U'][:].reshape(PG.shape)
     W_M_mat = h5['energies']['abs_W_M'][:].reshape(PG.shape)
@@ -192,7 +189,7 @@ def plot_energy_costs(h5_filenames, c_arr, show = False):
 #------------------------------------------------------------------------------ 
 # Sainity checks
     
-def plot_input_output_energy_balance(h5_filenames, c_arr, show = False):
+def plot_input_output_energy_balance(h5_filename, show = False):
     '''
     Plots work done by the muscles per undulation cycle, energy lost 
     per undulation cycle and relative error between the two
@@ -202,21 +199,14 @@ def plot_input_output_energy_balance(h5_filenames, c_arr, show = False):
     :param show (bool): If true, show plot
     '''
         
-    h5, PG  = load_h5_file(h5_filenames[0])
+    h5, PG  = load_h5_file(h5_filename)
     lam_arr = PG.v_from_key('lam')
+    c_arr = PG.v_from_key('c')
     LAM, C  = np.meshgrid(lam_arr, c_arr)        
 
-    T_undu = 1.0 / PG.base_parameter['f']    
-
-    E_out_mat = np.zeros_like(LAM)     
-    W_M_mat = np.zeros_like(LAM)
-                               
-    for i, fn in enumerate(h5_filenames):
-    
-        h5, _ = load_h5_file(fn)
-                
-        E_out_mat[i, :] = h5['energies']['E_out'][:]   
-        W_M_mat[i, :] = h5['energies']['abs_W_M'][:]   
+    # rows iterate over lambda, columns over c
+    W_M_mat = h5['energies']['abs_W_M'][:].reshape(PG.shape).T
+    E_out_mat = h5['energies']['E_out'][:].reshape(PG.shape).T
                                                     
     # Plot    
     fig = plt.figure(figsize = (10, 14))
@@ -466,14 +456,21 @@ if __name__ == '__main__':
 
 #------------------------------------------------------------------------------ 
 # Plotting    
+    
+    # h5_filename = (f'undulation_'
+    #     f'lam_min=0.5_lam_max=2.0_lam_step=0.1_'
+    #     f'c_min=0.5_c_max=1.6_c_step=0.1_f=2.0_'
+    #     f'mu_0.001_N=100_dt=0.01.h5'
+    #     )
+    
     h5_filename = (f'undulation_'
-        f'lam_min=0.5_lam_max=2.0_lam_step=0.1_'
-        f'c_min=0.5_c_max=1.6_c_step=0.1_f=2.0_'
-        f'mu_0.001_N=100_dt=0.01.h5'
-        )
+        'lam_min=0.5_lam_max=2.0_lam_step=0.1_'
+        'c_min=0.5_c_max=1.6_c_step=0.1'
+        '_f=2.0_mu_0.001_N=250_dt=0.0001.h5')
 
     plot_undulation_speed_and_muscle_work(h5_filename, show = True)        
-    #plot_input_output_energy_balance(h5_filenames, c_arr, show = False)
+    
+    plot_input_output_energy_balance(h5_filenames, c_arr, show = False)
     #plot_energy_costs(h5_filenames, c_arr, show = False)
         
     #plot_power_balance(h5_filenames[5])
