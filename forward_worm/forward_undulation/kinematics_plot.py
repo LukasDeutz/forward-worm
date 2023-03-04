@@ -3,6 +3,9 @@ Created on 14 Feb 2023
 
 @author: lukas
 '''
+#Built-in
+from argparse import ArgumentParser
+
 # Third-party imports
 import h5py
 from pathlib import Path
@@ -11,6 +14,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import RectBivariateSpline
 from scipy.optimize import minimize
+from scipy.integrate import quad
 
 # Local imports
 from forward_worm.forward_undulation.undulations_dirs import log_dir, sim_dir, sweep_dir, fig_dir, video_dir
@@ -60,20 +64,18 @@ def generate_worm_videos(h5_filename):
 #------------------------------------------------------------------------------ 
 # Results
 
-def plot_undulation_speed_and_muscle_work(h5_filename, show = False):
+def plot_U_and_W_M_over_lam_and_c(
+        fig_path,
+        lam_arr,
+        c_arr,
+        U_mat,
+        W_M_mat,        
+        show = False):
     '''
     Plots normalized undulation speed and mechanical muscle work done per 
     undulation cycle
     '''
-            
-    h5, PG  = load_h5_file(h5_filename)
-    lam_arr = PG.v_from_key('lam')
-    c_arr = PG.v_from_key('c')
-        
-    # rows iterate over lambda, columns over c
-    U_mat = h5['U'][:].reshape(PG.shape)
-    W_M_mat = h5['energies']['abs_W_M'][:].reshape(PG.shape)
-            
+                        
     # Fit maximal speed using spline
     # Use maximum speed on grid as initial guess 
     j_max, i_max = np.unravel_index(np.argmax(U_mat), U_mat.shape)
@@ -111,12 +113,40 @@ def plot_undulation_speed_and_muscle_work(h5_filename, show = False):
     ax1.set_xlabel(r'$\lambda$', fontsize = fz)
                                                            
     if show: plt.show()
-    
-    filename =('swimming_speed_and_muscle_work_lam_c_'
-        f'N={PG.base_parameter["N"]}_dt={PG.base_parameter["dt"]}.png')
-    plt.savefig(fig_dir / filename)
+        
+    plt.savefig(fig_path)
 
     return
+
+def plot_U_W_M_over_f(h5_filename, show=False):
+
+    h5, PG  = load_h5_file(h5_filename)
+    lam_arr = PG.v_from_key('lam')
+    c_arr = PG.v_from_key('c')
+    f_arr = PG.v_from_key('f')
+
+    U = h5['U'][:].reshape(PG.shape)
+    W_M = h5['energies']['abs_W_M'][:].reshape(PG.shape)
+
+    fig_dir = 'U_W_M' / Path(h5_filename)
+    if not fig_dir.exists(): fig_dir.mkdir(fig_dir, parents = True)
+     
+    for f, U_mat, W_M_mat in zip(f_arr, W_M, U):
+
+       fig_path = fig_dir / f'f={f:.2f}.png'        
+       
+       plot_U_and_W_M_over_lam_and_c(
+            fig_path,
+            lam_arr,
+            c_arr,
+            U_mat,
+            W_M_mat,
+            show=show)
+    
+    return
+    
+
+
 
 def plot_energy_costs(h5_filenames, c_arr, show = False):
 
@@ -381,21 +411,24 @@ def plot_power_balance(h5_filename,
     return
 
 def potential():
-    
+        
     lam_arr = np.linspace(0.5, 2.0, 10)
     A_arr = np.linspace(1.0, 12.0, 13)
-    f = 2.0
-    
     t_arr = np.linspace(0, 2.5, 1e3)        
-    
+    f = 2.0    
+    w = 2*np.pi*f 
+    #TODO: Add second moment area  
+    I = 0
+        
     for lam, A in itertools.product(lam_arr, A_arr):
         for t in t_arr:
-            q = lam / (2 * np.pi)
-                
-            k = lambda s: A*np.sin(q*s - ome)
-        
-        pass
-    
+            q = lam / (2 * np.pi)                
+            k = lambda s: A*np.sin(q*s - w*t)
+            dot_k = lambda s: A*w*np.cos(q*s - w*t)
+            
+            V_dot = quad()
+
+             
     return    
         
     
@@ -480,18 +513,27 @@ if __name__ == '__main__':
     #     f'mu_0.001_N=100_dt=0.01.h5'
     #     )
 
-    h5_filename = ('undulation_'
-        'lam_min=0.5_lam_max=2.0_lam_step=0.1_'
-        'c_min=0.5_c_max=1.6_c_step=0.1_'
-        'f=2.0_mu_0.001_N=250_dt=0.001.h5')
+    # h5_filename = ('undulation_'
+    #     'lam_min=0.5_lam_max=2.0_lam_step=0.1_'
+    #     'c_min=0.5_c_max=1.6_c_step=0.1_'
+    #     'f=2.0_mu_0.001_N=250_dt=0.001.h5')
     
     # h5_filename = (f'undulation_'
     #     'lam_min=0.5_lam_max=2.0_lam_step=0.1_'
     #     'c_min=0.5_c_max=1.6_c_step=0.1'
     #     '_f=2.0_mu_0.001_N=250_dt=0.0001.h5')
 
+    h5_filename = ('undulation_'
+        'f_min=0.5_f_max=2.0_f_step=0.5_'
+        'lam_min=0.5_lam_max=2.0_lam_step=0.1_'
+        'c_min=0.5_c_max=2.0_c_step=0.1_'
+        'mu_0.001_N=250_dt=0.001.h5')
+
+    plot_U_W_M_over_f(h5_filename)
+    
     #plot_undulation_speed_and_muscle_work(h5_filename, show = True)            
-    plot_input_output_energy_balance(h5_filename, show = True)
+    # plot_input_output_energy_balance(h5_filename, show = True)
+    
     # plot_true_powers(h5_filename, show=True)
     
     #plot_energy_costs(h5_filenames, c_arr, show = False)

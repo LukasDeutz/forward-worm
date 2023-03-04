@@ -197,7 +197,7 @@ def sim_lam_c(argv):
                                                                                             
     return 
 
-def sim_lam_c_f(argv):
+def sim_f_lam_c(argv):
     '''
     Parameter sweep over wavelength lam amplitude wavenumber ratio c=A/q and undulation frequency  
     '''    
@@ -217,28 +217,29 @@ def sim_lam_c_f(argv):
     model_param = vars(model_parser.parse_known_args(argv)[0])
                                 
     # Creare parameter Grid            
+    f_min, f_max = sweep_param.f[0], sweep_param.f[1]
+    f_step = sweep_param.f[2] 
     lam_min, lam_max = sweep_param.lam[0], sweep_param.lam[1]   
     lam_step = sweep_param.lam[2]        
     c_min, c_max = sweep_param.c[0], sweep_param.c[1]
     c_step = sweep_param.c[2] 
-    f_min, f_max = sweep_param.f[0], sweep_param.f[1]
-    f_step = sweep_param.f[2] 
             
+    f_param = {'v_min': f_min, 'v_max': f_max + 0.1*f_step, 
+        'N': None, 'step': f_step, 'round': 2}                                                
     lam_param = {'v_min': lam_min, 'v_max': lam_max + 0.1*lam_step, 
         'N': None, 'step': lam_step, 'round': 2}                                                
     c_param = {'v_min': c_min, 'v_max': c_max + 0.1*c_step, 
         'N': None, 'step': c_step, 'round': 2}                                                
-    f_param = {'v_min': f_min, 'v_max': f_max + 0.1*f_step, 
-        'N': None, 'step': f_step, 'round': 2}                                                
     
-    grid_param = {'lam': lam_param, 'c': c_param, 'f': f_param}
+    grid_param = {'f': f_param, 'lam': lam_param, 'c': c_param}
 
     PG = ParameterGrid(model_param, grid_param)
 
     filename = (
-        f'undulation_lam_min={lam_min}_lam_max={lam_max}_lam_step={lam_step}_'
-        f'c_min={lam_min}_c_max={lam_max}_c_step={lam_step}_'
+        f'undulation_'
         f'f_min={f_min}_f_max={f_max}_f_step={f_step}_'                
+        f'lam_min={lam_min}_lam_max={lam_max}_lam_step={lam_step}_'
+        f'c_min={lam_min}_c_max={lam_max}_c_step={lam_step}_'
         f'mu_{model_param["mu"]}_N={model_param["N"]}_dt={model_param["dt"]}.h5')        
         
     h5_filepath = sweep_dir / filename 
@@ -260,6 +261,9 @@ def sim_lam_c_f(argv):
         exper_spec,
         sweep_param.overwrite,
         sweep_param.debug)
+
+    compute_swimming_speed(h5, PG)
+    compute_energy_per_undulation_period(h5, PG)
 
     h5.close()
     
@@ -335,7 +339,7 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('-sim',  
         type = str, 
-        choices = ['sim_lam_c', 'sim_lam_c_f', 'sim_lam_c_eta_nu'], 
+        choices = ['sim_lam_c', 'sim_f_lam_c', 'sim_lam_c_eta_nu'], 
         help='Simulation function to call')
     # Run function passed via command line
     args = parser.parse_known_args(argv)[0]    
