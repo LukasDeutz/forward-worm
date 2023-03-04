@@ -257,6 +257,9 @@ def sim_lam_c_f(argv):
         sweep_param.overwrite,
         sweep_param.debug)
 
+    compute_swimming_speed(h5, PG)
+    compute_energy_per_undulation_period(h5, PG)
+
     h5.close()
     
     return
