@@ -195,7 +195,7 @@ def sim_lam_c(argv):
         
     h5.close()
                                                                                             
-    return 
+    return
 
 def sim_f_lam_c(argv):
     '''
@@ -275,39 +275,46 @@ def sim_lam_c_eta_nu(N_worker,
         overwrite = False,
         debug = False):
 
-    param = undulation_rft_parameter()
-    param['T'] = 2.5
-    param['N'] = 250
-    param['dt'] = 1e-3
-    param['N_report'] = 125
-    param['dt_report'] = 1e-2
-    param['A'] = None
-                                
-    # Parameter Grid    
-    lam_min, lam_max, lam_step = 0.5, 2.0, 0.1        
-    lam_param = {'v_min': lam_min, 'v_max': lam_max + 0.1*lam_step, 
-        'N': None, 'step': lam_step, 'round': 2}                                                
+    '''
+    Parameter sweep over wavelength lam amplitude wavenumber ratio c=A/q and undulation frequency  
+    '''    
+    # parse sweep parameter
+    sweep_parser = default_sweep_parameter()    
+    sweep_parser.add_argument('--eta', 
+        type=float, nargs=3, default=[-3, 0.0, 1.0])     
+    sweep_param = sweep_parser.parse_known_args(argv)[0]    
+    sweep_parser.add_argument('--lam', 
+        type=float, nargs = 3, default=[0.5, 2.0, 0.1])    
+    sweep_parser.add_argument('--c', 
+        type=float, nargs=3, default=[0.5, 1.6, 0.1])     
+    sweep_param = sweep_parser.parse_known_args(argv)[0]    
 
-    c_min, c_max, c_step = 0.5, 1.6, 0.1
-    c_param = {'v_min': c_min, 'v_max': c_max + 0.1*c_step, 
-        'N': None, 'step': c_step, 'round': 2}                                                
-        
-    eta_min, eta_max, eta_step = -3, 0.0, 1.0
-    
+    # parse model parameter and convert to dict
+    model_parser = model_parameter_parser()    
+    model_param = vars(model_parser.parse_known_args(argv)[0])
+                                
+    # Create parameter Grid            
+    eta_min, eta_max = sweep_param.eta[0], sweep_param.eta[1]
+    eta_step = sweep_param.eta[2] 
+    lam_min, lam_max = sweep_param.lam[0], sweep_param.lam[1]   
+    lam_step = sweep_param.lam[2]        
+    c_min, c_max = sweep_param.c[0], sweep_param.c[1]
+    c_step = sweep_param.c[2] 
+                                
     eta_param = {'v_min': eta_min, 'v_max': eta_max + 0.1*eta_step, 
-        'N': None, 'step': eta_step, 'round': 3, 'log': True, 'scale': param['E']}
-    
+        'N': None, 'step': eta_step, 'round': 3, 'log': True, 'scale': param['E']}    
     nu_param = eta_param.copy()
     nu_param['scale'] = param['G']
 
-    grid_param = {'lam': lam_param, 'c': c_param, ('eta', 'nu'): (eta_param, nu_param)}
+    grid_param = {('eta', 'nu'): (eta_param, nu_param), 'lam': lam_param, 'c': c_param}
 
     PG = ParameterGrid(param, grid_param)
 
     filename = (
-        f'undulation_lam_min={lam_min}_lam_max={lam_max}_lam_step={lam_step}_'
-        f'c_min={lam_min}_c_max={lam_max}_c_step={lam_step}_'
+        f'undulation_'
         f'eta_min={lam_min}_eta_max={lam_max}_eta_step={eta_step}_'                
+        f'lam_min={lam_min}_lam_max={lam_max}_lam_step={lam_step}_'
+        f'c_min={lam_min}_c_max={lam_max}_c_step={lam_step}_'
         f'f={param["f"]}_mu_{param["mu"]}_N={param["N"]}_dt={param["dt"]}.h5')        
         
     h5_filepath = sweep_dir / filename 
