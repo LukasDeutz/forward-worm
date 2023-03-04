@@ -269,7 +269,7 @@ def sim_f_lam_c(argv):
     
     return
 
-def sim_lam_c_eta_nu(N_worker, 
+def sim_eta_nu_lam_c(N_worker, 
         simulate = True,
         save_raw_data = True,
         overwrite = False,
@@ -349,7 +349,7 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('-sim',  
         type = str, 
-        choices = ['sim_lam_c', 'sim_f_lam_c', 'sim_lam_c_eta_nu'], 
+        choices = ['sim_lam_c', 'sim_f_lam_c', 'sim_eta_nu_lam_c'], 
         help='Simulation function to call')
     # Run function passed via command line
     args = parser.parse_known_args(argv)[0]    
