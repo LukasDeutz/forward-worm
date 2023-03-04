@@ -8,7 +8,7 @@ Created on 17 Aug 2022
 from os.path import join
 import numpy as np
 import h5py
-from argparse import ArgumentParser
+from argparse import ArgumentParser, BooleanOptionalAction
 
 # Local imports
 from simple_worm_experiments.grid_loader import GridLoader
@@ -24,13 +24,13 @@ def default_sweep_parameter():
     
     parser.add_argument('--worker', type = int, default = 10,
         help = 'Number of processes') 
-    parser.add_argument('--simulate', type = bool, default = True,
+    parser.add_argument('--simulate', action=BooleanOptionalAction, default = True,
         help = 'If true, simulations are run from scratch') 
-    parser.add_argument('--save_raw_data', type = bool, default = True,
+    parser.add_argument('--save_raw_data', action=BooleanOptionalAction, default = True,
         help = 'If true, FrameSequences are pickled to disk') 
-    parser.add_argument('--overwrite', type = bool, default = False,
+    parser.add_argument('--overwrite', action=BooleanOptionalAction, default = False,
         help = 'If true, already existing simulation results are overwritten')
-    parser.add_argument('--debug', type = bool, default = False,
+    parser.add_argument('--debug', action=BooleanOptionalAction, default = False,
         help = 'If true, exception handling is turned off which is helpful for debugging')    
     
     return parser
