@@ -82,7 +82,7 @@ def save_experiment_to_h5(PG,
         output_dir,
         log_dir, 
         FS_keys = ['x', 'Omega'], 
-        CS_keys = 'Omega'):    
+        CS_keys = ['Omega', 'sigma']):    
     
     '''
     Pools experiment results and saves them to single HDF5
@@ -90,9 +90,9 @@ def save_experiment_to_h5(PG,
     :param PG (ParameterGrid): Parameter grid object
     :param h5_filepath (str): HDF5 filepath  
     :param output_dir (str): Output directory FrameSequence
-    :param h5_filepath (str): Log file directory    
-    :param FS_keys (list): Frame variables to save to h5
-    :param CS_keys (list): Control variables to save to h5
+    :param log_dir (str): Log file directory    
+    :param FS_keys (list): List of frame variables which are saved to h5
+    :param CS_keys (list): List of vontrol variables which are saved to h5
     '''    
     
     # Save results to HDF5            
