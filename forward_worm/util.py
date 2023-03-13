@@ -103,8 +103,6 @@ def save_experiment_to_h5(PG,
         
     h5 = GP.save_data(h5_filepath, FS_keys, CS_keys)            
 
-    h5['PG'] = PG.filename
-
     exit_status = h5['exit_status'][:]
 
     print(f'Finished simulations: {np.sum(exit_status)/len(exit_status)*100}% failed')    
