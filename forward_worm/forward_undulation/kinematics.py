@@ -227,8 +227,9 @@ def compute_energies_for_varying_f_and_T(
         
 def sim_mu_E(argv):
     '''
-    Parameter sweep over wavelength lam amplitude wavenumber ratio c=A/q  
+    Parameter sweep over fluid viscosity and Young's modulus
     '''    
+    
     # parse sweep parameter
     sweep_parser = default_sweep_parameter()    
     sweep_parser.add_argument('--mu', 
@@ -314,7 +315,98 @@ def sim_mu_E(argv):
     h5_raw_data.close()
             
     return
+
+def sim_mu_E(argv):
+    '''
+    Parameter sweep over fluid viscosity and Young's modulus E
+    '''    
     
+    # parse sweep parameter
+    sweep_parser = default_sweep_parameter()    
+    sweep_parser.add_argument('--mu', 
+        type=float, nargs = 3, default=[-3, 1, 5])    
+    sweep_parser.add_argument('--E', 
+        type=float, nargs = 3, default=[1, 7, 30])    
+    sweep_param = sweep_parser.parse_known_args(argv)[0]    
+
+    # parse model parameter and convert to dict
+    model_parser = model_parameter_parser()    
+    model_param = vars(model_parser.parse_known_args(argv)[0])
+
+    # print parameter which have been set
+    print({k: v for k, v in 
+        model_param.items() if v != model_parser.get_default(k)})
+
+    E_min, E_max = sweep_param.E[0], sweep_param.E[1]   
+    N_E = sweep_param.E[2]
+    mu_min, mu_max = sweep_param.mu[0], sweep_param.mu[1]
+    N_mu = sweep_param.mu[2]
+
+    mu_param = {'v_min': mu_min, 'v_max': mu_max, 
+        'N': N_mu, 'step': None, 'round': 3, 'log': True}    
+                        
+    E_param = {'v_min': E_min, 'v_max': E_max, 
+        'N': N_E, 'step': None, 'round': 0, 'log': True}    
+
+    # Poisson ratio
+    p = 0.5    
+    G_param = E_param.copy()
+    G_param['scale'] = 1.0 / (2.0 * (1 + p) )
+    
+    eta_param = E_param.copy()
+    eta_param['scale'] = 1e-2
+    eta_param['round'] = 2
+
+    nu_param = E_param.copy()
+    nu_param['scale'] = 1.0 / (2.0 * (1 + p) ) * 1e-2
+    nu_param['round'] = 2
+    
+    grid_param = {'mu': mu_param,
+        ('E', 'G', 'eta', 'nu'): (E_param, G_param, eta_param, nu_param)}
+
+    PG = ParameterGrid(model_param, grid_param)
+
+    # Run sweep
+    filename = (
+        f'raw_data_mu_'
+        f'mu_min={mu_min}_mu_max={mu_max}_N_mu={N_mu}_'
+        f'E_min={E_min}_E_max={E_max}_N_E={N_E}_'
+        f'A_{model_param["A"]}_lam_{model_param["lam"]}_f={model_param["f"]}_'
+        f'N={model_param["N"]}_dt={model_param["dt"]}.h5')        
+
+    h5_filepath = sweep_dir / filename 
+    exper_spec = 'UE'
+        
+    h5_raw_data = sim_exp_wrapper(sweep_param.simulate, 
+        sweep_param.save_raw_data,       
+        ['x', 'Omega', 'sigma',
+        'V_dot_k', 'V_dot_sig', 'D_k', 'D_sig', 
+        'dot_W_F_lin', 'dot_W_F_rot', 
+        'dot_W_M_lin', 'dot_W_M_rot'],
+        ['Omega', 'sigma'],
+        sweep_param.worker, 
+        PG, 
+        UndulationExperiment.sinusoidal_traveling_wave_control_sequence,
+        h5_filepath,
+        log_dir,
+        sim_dir,
+        exper_spec,
+        sweep_param.overwrite,
+        sweep_param.debug)
+
+    h5_filename = (f'speed_and_energies_'
+        f'mu_min={mu_min}_mu_max={mu_max}_N_mu={N_mu}_'
+        f'E_min={E_min}_E_max={E_max}_N_E={N_E}_'
+        f'A_{model_param["A"]}_lam_{model_param["lam"]}_f={model_param["f"]}_'
+        f'N={model_param["N"]}_dt={model_param["dt"]}.h5')        
+
+    save_swimming_speed_and_energy_to_h5(h5_filename, 
+        h5_raw_data, PG, N_undu_skip = 1)
+    
+    h5_raw_data.close()
+            
+    return
+ 
 def sim_lam_c(argv):
     '''
     Parameter sweep over wavelength lam amplitude wavenumber ratio c=A/q  
@@ -383,6 +475,108 @@ def sim_lam_c(argv):
     h5.close()
                                                                                             
     return
+
+def sim_E_lam_c(argv):
+    '''
+    Parameter sweep over fluid viscosity and Young's modulus E
+    '''        
+    # parse sweep parameter
+    sweep_parser = default_sweep_parameter()    
+    
+    sweep_parser.add_argument('--E', 
+        type=float, nargs = 3, default=[2, 5, 1])    
+    sweep_parser.add_argument('--lam', 
+        type=float, nargs = 3, default=[0.5, 2.0, 0.1])    
+    sweep_parser.add_argument('--c', 
+        type=float, nargs=3, default=[0.5, 1.6, 0.1])     
+    sweep_param = sweep_parser.parse_known_args(argv)[0]    
+
+
+    # parse model parameter and convert to dict
+    model_parser = model_parameter_parser()    
+    model_param = vars(model_parser.parse_known_args(argv)[0])
+
+    # print parameter which have been set
+    print({k: v for k, v in 
+        model_param.items() if v != model_parser.get_default(k)})
+
+    # Creare parameter Grid            
+    E_min, E_max = sweep_param.E[0], sweep_param.E[1]   
+    E_step = sweep_param.E[2]
+    lam_min, lam_max = sweep_param.lam[0], sweep_param.lam[1]   
+    lam_step = sweep_param.lam[2]        
+    c_min, c_max = sweep_param.c[0], sweep_param.c[1]
+    c_step = sweep_param.c[2] 
+                        
+    E_param = {'v_min': E_min, 'v_max': E_max, 
+        'N': None, 'step': E_step, 'round': 0, 'log': True}    
+
+    # Poisson ratio
+    p = 0.5    
+    G_param = E_param.copy()
+    G_param['scale'] = 1.0 / (2.0 * (1 + p) )
+    
+    eta_param = E_param.copy()
+    eta_param['scale'] = 1e-2
+    eta_param['round'] = 1
+
+    nu_param = E_param.copy()
+    nu_param['scale'] = 1.0 / (2.0 * (1 + p) ) * 1e-2
+    nu_param['round'] = 2
+
+    lam_param = {'v_min': lam_min, 'v_max': lam_max + 0.1*lam_step, 
+        'N': None, 'step': lam_step, 'round': 2}                                                
+    c_param = {'v_min': c_min, 'v_max': c_max + 0.1*c_step, 
+        'N': None, 'step': c_step, 'round': 2}                                                
+    
+    grid_param = {'lam': lam_param, 'c': c_param}
+    
+    grid_param = {('E', 'G', 'eta', 'nu'): (E_param, G_param, eta_param, nu_param),
+        'lam': lam_param, 'c': c_param}
+
+    PG = ParameterGrid(model_param, grid_param)
+
+    # Run sweep
+    filename = (
+        f'raw_data_mu_'
+        f'E_min={E_min}_E_max={E_max}_E_step={E_step}_'
+        f'c_min={c_min}_c_max={c_max}_c_step={c_step}_'
+        f'f={model_param["f"]}_mu_{model_param["mu"]}_'        
+        f'N={model_param["N"]}_dt={model_param["dt"]}.h5')        
+
+    h5_filepath = sweep_dir / filename 
+    exper_spec = 'UE'
+        
+    h5_raw_data = sim_exp_wrapper(sweep_param.simulate, 
+        sweep_param.save_raw_data,       
+        ['x', 'Omega', 'sigma',
+        'V_dot_k', 'V_dot_sig', 'D_k', 'D_sig', 
+        'dot_W_F_lin', 'dot_W_F_rot', 
+        'dot_W_M_lin', 'dot_W_M_rot'],
+        ['Omega', 'sigma'],
+        sweep_param.worker, 
+        PG, 
+        UndulationExperiment.sinusoidal_traveling_wave_control_sequence,
+        h5_filepath,
+        log_dir,
+        sim_dir,
+        exper_spec,
+        sweep_param.overwrite,
+        sweep_param.debug)
+
+    h5_filename = (f'speed_and_energies_'
+        f'E_min={E_min}_E_max={E_max}_E_step={E_step}_'
+        f'c_min={c_min}_c_max={c_max}_c_step={c_step}_'
+        f'f={model_param["f"]}_mu_{model_param["mu"]}_'        
+        f'N={model_param["N"]}_dt={model_param["dt"]}.h5')        
+
+    save_swimming_speed_and_energy_to_h5(h5_filename, 
+        h5_raw_data, PG, N_undu_skip = 1)
+    
+    h5_raw_data.close()
+            
+    return
+
 
 def sim_f_lam_c(argv):
     '''
@@ -550,7 +744,7 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('-sim',  
         type = str, 
-        choices = ['sim_mu_E', 'sim_lam_c', 'sim_f_lam_c', 'sim_eta_nu_lam_c'], 
+        choices = ['sim_mu_E', 'sim_lam_c', 'sim_E_lam_c', 'sim_f_lam_c', 'sim_eta_nu_lam_c'], 
         help='Simulation function to call')
     # Run function passed via command line
     args = parser.parse_known_args(argv)[0]    
