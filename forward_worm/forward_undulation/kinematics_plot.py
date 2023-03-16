@@ -64,6 +64,25 @@ def generate_worm_videos(h5_filename):
 #------------------------------------------------------------------------------ 
 # Results
 
+def plot_U_over_E_for_diffenrent_mu(h5_filename):
+    
+    h5, PG  = load_h5_file(h5_filename)
+    E_arr = PG.v_from_key('E')
+    mu_arr = PG.v_from_key('mu')
+    
+    U_mat = h5['U'][:]
+        
+    ax = plt.subplot(111)
+    
+    for U_arr, mu in zip(U_mat, mu_arr):
+        
+        ax.semilogx(E_arr, U_arr, label = fr'$\mu = {mu}$')
+    
+    ax.legend()
+    plt.show()
+    
+    return
+
 def plot_U_and_W_M_over_lam_and_c(
         fig_path,
         lam_arr,
@@ -84,8 +103,9 @@ def plot_U_and_W_M_over_lam_and_c(
     func = RectBivariateSpline(lam_arr, c_arr, -U_mat)    
     func_wrap = lambda x: func(x[0], x[1])[0]
     
-    res = minimize(func_wrap, x0)
-                    
+    res = minimize(func_wrap, x0, 
+        bounds=[(lam_arr.min(), lam_arr.max()), (c_arr.min(), c_arr.max())])
+     
     # Plot    
     fig = plt.figure(figsize = (12, 6))
     gs = plt.GridSpec(1, 2)
@@ -95,9 +115,9 @@ def plot_U_and_W_M_over_lam_and_c(
     levels = 10        
     fz = 20 # axes label fontsize
     cb_fz = 16 # colorbar fontsize
-    
+            
     LAM, C  = np.meshgrid(lam_arr, c_arr)        
-    CS = ax0.contourf(LAM, C, U_mat.T, levels, cmap = plt.cm.plasma)
+    CS = ax0.contourf(LAM, C, U_mat.T, levels=levels, cmap = plt.cm.plasma)
     ax0.contour(LAM, C, U_mat.T, levels, linestyles = '-', colors = ('k',))    
     ax0.plot(res.x[0], res.x[1], 'x', c = 'k', ms = '10')
     cbar = plt.colorbar(CS, ax = ax0)
@@ -118,22 +138,65 @@ def plot_U_and_W_M_over_lam_and_c(
 
     return
 
-def plot_U_W_M_over_f(h5_filename, show=False):
+def plot_W_over_U_over_lam_and_c(
+        fig_path,
+        lam_arr,
+        c_arr,
+        U_mat,
+        W_mat,        
+        show = False):
+    '''
+    Plots normalized undulation speed and mechanical muscle work done per 
+    undulation cycle
+    '''
+                             
+    # Plot    
+    fig = plt.figure(figsize = (12, 6))
+    gs = plt.GridSpec(1, 2)
+    ax0 = plt.subplot(gs[0])
+                        
+    levels = 10        
+    fz = 20 # axes label fontsize
+    cb_fz = 16 # colorbar fontsize
+    
+    W = W_mat.T        
+    U = U_mat.T
+    
+    LAM, C  = np.meshgrid(lam_arr, c_arr)        
+    CS = ax0.contourf(LAM, C, W/U, levels=levels, cmap = plt.cm.plasma)
+    ax0.contour(LAM, C, W/U, levels, linestyles = '-', colors = ('k',))    
+    cbar = plt.colorbar(CS, ax = ax0)
+    cbar.set_label('$W/U$', fontsize = cb_fz)
+                    
+    ax0.set_xlabel(r'$\lambda$', fontsize = fz)
+    ax0.set_ylabel(r'$c$', fontsize = fz)    
+                                                           
+    if show: plt.show()
+        
+    plt.savefig(fig_path)
+
+    return
+
+def plot_U_and_W_for_different_f(h5_filename, show=False):
+    '''
+    Plot undulation speed U and work W_M done by the muscles per undulation 
+    cycle over lambda and c for different frequencies f    
+    '''
 
     h5, PG  = load_h5_file(h5_filename)
     lam_arr = PG.v_from_key('lam')
     c_arr = PG.v_from_key('c')
     f_arr = PG.v_from_key('f')
 
-    U = h5['U'][:].reshape(PG.shape)
-    W_M = h5['energies']['abs_W_M'][:].reshape(PG.shape)
+    U = h5['U'][:]
+    W_M = h5['energies']['W'][:]
 
-    fig_dir = 'U_W_M' / Path(h5_filename)
-    if not fig_dir.exists(): fig_dir.mkdir(fig_dir, parents = True)
+    dir = fig_dir / 'U_W_M' / Path(h5_filename)
+    if not dir.exists(): dir.mkdir(parents = True)
      
-    for f, U_mat, W_M_mat in zip(f_arr, W_M, U):
+    for f, U_mat, W_M_mat in zip(f_arr, U, W_M):
 
-       fig_path = fig_dir / f'f={f:.2f}.png'        
+       fig_path = dir / f'f={f:.2f}.png'        
        
        plot_U_and_W_M_over_lam_and_c(
             fig_path,
@@ -144,9 +207,71 @@ def plot_U_W_M_over_f(h5_filename, show=False):
             show=show)
     
     return
+
+def plot_W_over_U_for_different_f(h5_filename, show=False):
+    '''
+    Plot undulation speed U and work W_M done by the muscles per undulation 
+    cycle over lambda and c for different frequencies f    
+    '''
+
+    h5, PG  = load_h5_file(h5_filename)
+    lam_arr = PG.v_from_key('lam')
+    c_arr = PG.v_from_key('c')
+    f_arr = PG.v_from_key('f')
+
+    U = h5['U'][:]
+    W_M = h5['energies']['W'][:]
+
+    dir = fig_dir / 'W_over_U' / Path(h5_filename)
+    if not dir.exists(): dir.mkdir(parents = True)
+     
+    for f, U_mat, W_M_mat in zip(f_arr, U, W_M):
+
+       fig_path = dir / f'f={f:.2f}.png'        
+       
+       plot_W_over_U_over_lam_and_c(
+            fig_path,
+            lam_arr,
+            c_arr,
+            U_mat,
+            W_M_mat,
+            show=show)
     
+    return
 
+    
+def plot_U_and_W_for_different_eta_nu(h5_filename, show=False):
+    '''
+    Plot undulation speed U and work W_M done by the muscles per undulation 
+    cycle over lambda and c for different body viscosity eta and nu  
+    '''
 
+    h5, PG  = load_h5_file(h5_filename)
+    lam_arr = PG.v_from_key('lam')
+    c_arr = PG.v_from_key('c')
+    eta_arr = PG.v_from_key('eta')
+    E = PG.base_parameter['E']
+    eta_over_E_arr = np.round(np.log10(eta_arr / E))
+    
+    U = h5['U'][:].reshape(PG.shape)
+    W_M = h5['energies']['abs_W_M'][:].reshape(PG.shape)
+
+    dir = fig_dir / 'U_W_M' / Path(h5_filename)
+    if not dir.exists(): dir.mkdir(parents = True)
+     
+    for eta_over_E, U_mat, W_M_mat in zip(eta_over_E_arr, U, W_M):
+
+       fig_path = dir / f'eta_over_E={eta_over_E:.1f}.png'        
+       
+       plot_U_and_W_M_over_lam_and_c(
+            fig_path,
+            lam_arr,
+            c_arr,
+            U_mat,
+            W_M_mat,
+            show=show)
+    
+    return
 
 def plot_energy_costs(h5_filenames, c_arr, show = False):
 
@@ -221,24 +346,103 @@ def plot_energy_costs(h5_filenames, c_arr, show = False):
 #------------------------------------------------------------------------------ 
 # Sainity checks
     
-def plot_input_output_energy_balance(h5_filename, show = False):
-    '''
-    Plots work done by the muscles per undulation cycle, energy lost 
-    per undulation cycle and relative error between the two
-    
-    :param h5_filenames (List[str]): List with hdf5 filenames
-    :param c_arr (np.array): A/q array
-    :param show (bool): If true, show plot
-    '''
+def plot_W_and_D_balance(
+        fig_path,
+        lam_arr,
+        c_arr,
+        W,
+        D, 
+        show = False):
         
+    W, D = W.T, D.T
+    LAM, C  = np.meshgrid(lam_arr, c_arr)        
+                                                    
+    # Plot    
+    fig = plt.figure(figsize = (10, 14))
+    gs = plt.GridSpec(3, 1)
+    ax0 = plt.subplot(gs[0])
+    ax1 = plt.subplot(gs[1])
+    ax2 = plt.subplot(gs[2])
+
+    fz = 20 # axes label fontsize
+    cb_fz = 18 # colobar labe fontsize
+                                                      
+    levels = 10        
+    # Plot mechanical work one per undulation cycle        
+    CS = ax0.contourf(LAM, C, W, levels, cmap = plt.cm.plasma)
+    ax0.contour(LAM, C, W, levels, colors = ('k',))                        
+    ax0.set_ylabel(r'$c$', fontsize = fz)        
+    cbar = plt.colorbar(CS, ax = ax0)
+    cbar.set_label('$W$', fontsize = cb_fz)
+
+    # Plot output energy        
+    CS = ax1.contourf(LAM, C, -D, levels, cmap = plt.cm.plasma)
+    ax1.contour(LAM, C, -D, levels, colors = ('k',))                        
+    ax1.set_ylabel(r'$c$', fontsize = fz)        
+    cbar = plt.colorbar(CS, ax = ax1)
+    cbar.set_label('$-D$', fontsize = cb_fz)
+
+    # Plot log of absolute relative error 
+    err = np.log10(np.abs(D + W) / np.abs(W))
+
+    CS = ax2.contourf(LAM, C, err, levels, cmap = plt.cm.cividis)
+    ax2.contour(LAM, C, err, levels, linestyles = '-', colors = ('k',))    
+    ax2.set_ylabel(r'$c$', fontsize = fz)        
+    cbar = plt.colorbar(CS, ax = ax2)
+    cbar.set_label('$\log(|W + D|/W)$', fontsize = cb_fz)
+    ax2.set_xlabel(r'$\lambda$', fontsize = fz)        
+                                                           
+    if show: plt.show()
+    
+    plt.savefig(fig_path)    
+    
+    return
+    
+def plot_W_and_D_over_lam_c_for_differnet_f(
+        h5_filename,
+        show=False):
+
     h5, PG  = load_h5_file(h5_filename)
     lam_arr = PG.v_from_key('lam')
     c_arr = PG.v_from_key('c')
-    LAM, C  = np.meshgrid(lam_arr, c_arr)        
+    f_arr = PG.v_from_key('f')
 
-    # rows iterate over lambda, columns over c
-    W_M_mat = h5['energies']['abs_W_M'][:].reshape(PG.shape).T
-    E_out_mat = h5['energies']['E_out'][:].reshape(PG.shape).T
+    # first dimension iterates over f, second and 
+    # third dimensions iterate over c and lam
+    W_arr = h5['energies']['W'][:]
+    D_arr = h5['energies']['D_I'][:] + h5['energies']['D_F'][:]
+
+    dir = fig_dir / 'W_D_balance' / Path(h5_filename)
+    if not dir.exists(): dir.mkdir(parents = True)
+     
+    for f, W, D in zip(f_arr, W_arr, D_arr):
+
+        fig_path = dir / f'f={f:.2f}.png'        
+       
+        plot_W_and_D_balance(
+                fig_path,
+                lam_arr,
+                c_arr,
+                W,
+                D, 
+                show = False)
+    
+    
+    
+def plot_W_M_E_balance(
+        fig_path,
+        lam_arr,
+        c_arr,
+        W_M_mat,
+        E_out_mat, 
+        show = False):
+    '''
+    Plots work done by the muscles per undulation cycle, energy lost 
+    per undulation cycle and relative error between the two    
+    '''
+        
+    W_M_mat, E_out_mat = W_M_mat.T, E_out_mat.T
+    LAM, C  = np.meshgrid(lam_arr, c_arr)        
                                                     
     # Plot    
     fig = plt.figure(figsize = (10, 14))
@@ -277,11 +481,67 @@ def plot_input_output_energy_balance(h5_filename, show = False):
                                                            
     if show: plt.show()
     
-    filename = (f'input_output_energy_balance_lam_c'
-        f'_N={PG.base_parameter["N"]}_dt={PG.base_parameter["dt"]}.png')
-    plt.savefig(fig_dir / filename)
+    plt.savefig(fig_path)
 
     return    
+
+def plot_W_M_E_over_lam_c_for_differnet_f(
+        h5_filename,
+        show=False):
+
+    h5, PG  = load_h5_file(h5_filename)
+    lam_arr = PG.v_from_key('lam')
+    c_arr = PG.v_from_key('c')
+    f_arr = PG.v_from_key('f')
+
+    # rows iterate over lambda, columns over c
+    W_M = h5['energies']['abs_W_M'][:].reshape(PG.shape)
+    E_out = h5['energies']['E_out'][:].reshape(PG.shape)
+
+    dir = fig_dir / 'W_M_E_balance' / Path(h5_filename)
+    if not dir.exists(): dir.mkdir(parents = True)
+     
+    for f, W_M_mat, E_out_mat in zip(f_arr, W_M, E_out):
+
+       fig_path = dir / f'f={f:.2f}.png'        
+       
+       plot_W_M_E_balance(
+            fig_path,
+            lam_arr,
+            c_arr,
+            W_M_mat,
+            E_out_mat,            
+            show=show)
+
+def plot_W_M_E_over_lam_c_for_differnet_eta_nu(
+        h5_filename,
+        show=False):
+
+    h5, PG  = load_h5_file(h5_filename)
+    lam_arr = PG.v_from_key('lam')
+    c_arr = PG.v_from_key('c')
+    eta_arr = PG.v_from_key('eta')
+    E = PG.base_parameter['E']
+    eta_over_E_arr = np.round(np.log10(eta_arr / E))
+
+    # rows iterate over lambda, columns over c
+    W_M = h5['energies']['abs_W_M'][:].reshape(PG.shape)
+    E_out = h5['energies']['E_out'][:].reshape(PG.shape)
+
+    dir = fig_dir / 'W_M_E_balance' / Path(h5_filename)
+    if not dir.exists(): dir.mkdir(parents = True)
+     
+    for eta_over_E, W_M_mat, E_out_mat in zip(eta_over_E_arr, W_M, E_out):
+
+       fig_path = dir / f'f={eta_over_E:.1f}.png'        
+       
+       plot_W_M_E_balance(
+            fig_path,
+            lam_arr,
+            c_arr,
+            W_M_mat,
+            E_out_mat,            
+            show=show)
 
 def plot_true_energy_costs(h5_filename, c_arr, show = False):
     '''
@@ -409,35 +669,7 @@ def plot_power_balance(h5_filename,
     plt.savefig(fig_dir / filename)
             
     return
-
-def potential():
         
-    lam_arr = np.linspace(0.5, 2.0, 10)
-    A_arr = np.linspace(1.0, 12.0, 13)
-    t_arr = np.linspace(0, 2.5, 1e3)        
-    f = 2.0    
-    w = 2*np.pi*f 
-    #TODO: Add second moment area  
-    I = 0
-        
-    for lam, A in itertools.product(lam_arr, A_arr):
-        for t in t_arr:
-            q = lam / (2 * np.pi)                
-            k = lambda s: A*np.sin(q*s - w*t)
-            dot_k = lambda s: A*w*np.cos(q*s - w*t)
-            
-            V_dot = quad()
-
-             
-    return    
-        
-    
-    
-    
-    
-    
-
-
 def plot_true_powers(
         h5_filename, 
         N_plot = 4,
@@ -495,6 +727,56 @@ def plot_true_powers(
     return
 
 
+#------------------------------------------------------------------------------ 
+# Understanding the results
+def plot_V_dot_max_over_lam_and_c(
+        V_dot_mat,
+        lam_arr,
+        c_arr):
+    
+    LAM, C  = np.meshgrid(lam_arr, c_arr)        
+
+
+
+    T_undu = 1.0 / PG.base_parameter['f']    
+    powers, t = EPP.powers_from_h5(h5, t_start = N_undu_skip * T_undu)
+
+
+
+    W_M_mat = h5['powers']['D'][:].reshape(PG.shape).T
+
+        
+    V_dot_mat.axis()
+        
+     
+    
+    
+    pass
+    
+
+
+def plot_V_dot_max_over_lam_and_c_for_different_f(
+        h5_filename,
+        N_undu_skip = 1.0):
+    
+    h5, PG  = load_h5_file(h5_filename)
+    lam_arr = PG.v_from_key('lam')
+    c_arr = PG.v_from_key('c')
+    f_arr = PG.v_from_key('f')
+
+    
+    powers, t = EPP.powers_from_h5(h5, t_start = N_undu_skip * T_undu)
+        
+    dot_V = powers['dot_V_k'] + powers['dot_V_sig']
+    
+    
+    
+    
+    
+    
+    
+    
+
 
 if __name__ == '__main__':
         
@@ -506,6 +788,11 @@ if __name__ == '__main__':
 
 #------------------------------------------------------------------------------ 
 # Plotting    
+    
+    h5_filename_E_mu = ('speed_and_energies_'
+        'mu_min=-3_mu_max=1_N_mu=5_'
+        'E_min=1_E_max=7_N_E=30_'
+        'A_4.0_lam_1.0_f=2.0_N=100_dt=0.01.h5')    
     
     # h5_filename = (f'undulation_'
     #     f'lam_min=0.5_lam_max=2.0_lam_step=0.1_'
@@ -523,13 +810,31 @@ if __name__ == '__main__':
     #     'c_min=0.5_c_max=1.6_c_step=0.1'
     #     '_f=2.0_mu_0.001_N=250_dt=0.0001.h5')
 
-    h5_filename = ('undulation_'
-        'f_min=0.5_f_max=2.0_f_step=0.5_'
-        'lam_min=0.5_lam_max=2.0_lam_step=0.1_'
-        'c_min=0.5_c_max=2.0_c_step=0.1_'
-        'mu_0.001_N=250_dt=0.001.h5')
+    # h5_filename_eta_nu = ('undulation_'
+    #     'eta_min=-3_eta_max=0.0_eta_step=1.0_'
+    #     'lam_min=0.5_lam_max=2.0_lam_step=0.1_'
+    #     'c_min=0.5_c_max=2.0_c_step=0.1_'
+    #     'f=2.0_mu_0.001_N=250_dt=0.001.h5')
 
-    plot_U_W_M_over_f(h5_filename)
+
+    # h5_filename_f = ('speed_and_energies_'
+    #     'f_min=0.5_f_max=2.0_f_step=0.5_'
+    #     'lam_min=0.5_lam_max=2.0_lam_step=0.1_'
+    #     'c_min=0.5_c_max=2.0_c_step=0.1_'
+    #     'mu_0.001_N=250_dt=0.001.h5')
+    
+    #plot_U_and_W_for_different_f(h5_filename_f)
+    # plot_W_and_D_over_lam_c_for_differnet_f(h5_filename_f)    
+    # plot_W_over_U_for_different_f(h5_filename_f)
+    plot_U_over_E_for_diffenrent_mu(h5_filename_E_mu)
+    
+    
+    #plot_U_and_W_for_different_eta_nu(h5_filename_eta_nu, show=False)
+    
+    #plot_W_M_E_over_f(h5_filename_f)    
+        
+    #plot_W_M_E_over_lam_c_for_differnet_eta_nu(
+    #     h5_filename_eta_nu)    
     
     #plot_undulation_speed_and_muscle_work(h5_filename, show = True)            
     # plot_input_output_energy_balance(h5_filename, show = True)
@@ -541,7 +846,6 @@ if __name__ == '__main__':
     #plot_power_balance(h5_filenames[5])
 
     # plot_true_powers(h5_filenames[5], show = True)
-    
         
     print('Finished!')
     
